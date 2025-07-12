@@ -29,7 +29,7 @@ def get_users():
 def list_translations():
     db_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
     if not os.path.exists(db_folder):
-        os.makedirs(db_folder, exist_ok=True)
+        # Folder does not exist, return empty list
         return jsonify(translations=[])
     files = [f for f in os.listdir(db_folder) if f.endswith('.SQLite3')]
     translations = [f.replace('.SQLite3', '') for f in files]
@@ -87,3 +87,6 @@ def load_data(translation):
         })
 
     return jsonify(verses=cleaned_rows)
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)
