@@ -1,7 +1,8 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
 import sqlite3
 import os
 import re
+import json
 
 app = Flask(__name__)
 
@@ -61,27 +62,35 @@ def list_translations():
 def load_data(translation):
     db_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
     db_path = os.path.join(db_folder, f"{translation}.SQLite3")
+    print(f"Requested translation: {translation}")
+    print(f"Database path: {db_path}")
     if not os.path.exists(db_path):
+        print(f"Database file not found: {db_path}")
         return jsonify(error=f"Database file not found: {db_path}"), 404
-
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    query = """
-        SELECT
-            ? AS Translation,
-            books.long_name || ' ' || verses.chapter || ':' || verses.verse AS Reference,
-            verses.text AS Verse
-        FROM verses
-        JOIN books ON verses.book_number = books.book_number
-        ORDER BY verses.book_number, verses.chapter, verses.verse
-    """
-    cursor.execute(query, (translation,))
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        query = """
+            SELECT
+                ? AS Translation,
+                books.long_name || ' ' || verses.chapter || ':' || verses.verse AS Reference,
+                verses.text AS Verse
+            FROM verses
+            JOIN books ON verses.book_number = books.book_number
+            ORDER BY verses.book_number, verses.chapter, verses.verse
+        """
+        cursor.execute(query, (translation,))
+        rows = cursor.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f"Exception opening or querying database: {e}")
+        return jsonify(error=str(e)), 500
 
     cleaned_rows = []
     for row in rows:
         verse_text = row[2]
+        if verse_text is None:
+            verse_text = ''
         # Remove <S> tags with Strong's numbers
         verse_text = re.sub(r'<S>[\d\s,]+<\/S>', '', verse_text)
         # Remove <p ...> tags (including <p> and <p ...>)
@@ -107,8 +116,8 @@ def load_data(translation):
             "Reference": row[1],
             "Verse": verse_text.strip()
         })
-
-    return jsonify(verses=cleaned_rows)
+    # Return JSON with ensure_ascii=False for Unicode
+    return Response(json.dumps({"verses": cleaned_rows}, ensure_ascii=False), mimetype='application/json')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
