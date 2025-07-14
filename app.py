@@ -67,9 +67,15 @@ def load_data(translation):
     if not os.path.exists(db_path):
         print(f"Database file not found: {db_path}")
         return jsonify(error=f"Database file not found: {db_path}"), 404
+    language = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+        cursor.execute("SELECT value FROM info WHERE name='language' LIMIT 1")
+        row = cursor.fetchone()
+        if row and row[0]:
+            language = row[0]
+        # Query verses
         query = """
             SELECT
                 ? AS Translation,
@@ -85,7 +91,6 @@ def load_data(translation):
     except Exception as e:
         print(f"Exception opening or querying database: {e}")
         return jsonify(error=str(e)), 500
-
     cleaned_rows = []
     for row in rows:
         verse_text = row[2]
@@ -114,7 +119,8 @@ def load_data(translation):
         cleaned_rows.append({
             "Translation": row[0],
             "Reference": row[1],
-            "Verse": verse_text.strip()
+            "Verse": verse_text.strip(),
+            "Language": language
         })
     # Return JSON with ensure_ascii=False for Unicode
     return Response(json.dumps({"verses": cleaned_rows}, ensure_ascii=False), mimetype='application/json')
