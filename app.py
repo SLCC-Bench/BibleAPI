@@ -31,7 +31,7 @@ def list_translations():
     db_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
     if not os.path.exists(db_folder):
         # Folder does not exist, return empty list
-        return jsonify(translations=[])
+        return Response(json.dumps({"translations": []}, ensure_ascii=False), mimetype='application/json')
     files = [f for f in os.listdir(db_folder) if f.endswith('.SQLite3')]
     translations = []
     for f in files:
@@ -56,7 +56,7 @@ def list_translations():
             "name": translation_name,
             "language": language
         })
-    return jsonify(translations=translations)
+    return Response(json.dumps({"translations": translations}, ensure_ascii=False), mimetype='application/json')
 
 @app.route('/api/verses/<translation>')
 def load_data(translation):
