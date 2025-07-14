@@ -1,30 +1,21 @@
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, Response, request
 import sqlite3
 import os
 import re
 import json
+import bcrypt
+import random
+import string
+import smtplib
+from email.message import EmailMessage
 
 app = Flask(__name__)
 
-@app.route('/api/users')
-def get_users():
-    db_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
-    db_files = [f for f in os.listdir(db_folder) if f.endswith('.SQLite3')]
-    result = {}
+def generate_otp(length=6):
+    return random.randint(100000, 999999)
 
-    for db_file in db_files:
-        db_path = os.path.join(db_folder, db_file)
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, name FROM users")
-            rows = cursor.fetchall()
-            conn.close()
-            result[db_file] = [{"id": row[0], "name": row[1]} for row in rows]
-        except Exception:
-            result[db_file] = []
-
-    return jsonify(users=result)
+def generate_registration_key(length=32):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 @app.route('/api/translations')
 def list_translations():
@@ -124,6 +115,264 @@ def load_data(translation):
         })
     # Return JSON with ensure_ascii=False for Unicode
     return Response(json.dumps({"verses": cleaned_rows}, ensure_ascii=False), mimetype='application/json')
+
+def get_users(cursor):
+    cursor.execute("SELECT id, firstname, lastname, username, email, orgname, isEmailVerified, isRegistered, created, updated FROM Users")
+    rows = cursor.fetchall()
+    return [{
+        "id": row[0],
+        "firstname": row[1],
+        "lastname": row[2],
+        "username": row[3],
+        "email": row[4],
+        "orgname": row[5],
+        "isEmailVerified": row[6],
+        "isRegistered": row[7],
+        "created": row[8],
+        "updated": row[9]
+    } for row in rows]
+
+def post_user(cursor, data):
+    firstname = data.get('firstname')
+    lastname = data.get('lastname')
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email')
+    orgname = data.get('orgname')
+    isEmailVerified = data.get('isEmailVerified', 0)
+    isRegistered = data.get('isRegistered', 0)
+    created = data.get('created')
+    updated = data.get('updated')
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    cursor.execute(
+        "INSERT INTO Users (firstname, lastname, username, password, email, orgname, isEmailVerified, isRegistered, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (firstname, lastname, username, hashed_password, email, orgname, isEmailVerified, isRegistered, created, updated)
+    )
+    user_id = cursor.lastrowid
+    otp = generate_otp()
+    registration_key = generate_registration_key()
+    hashed_registration_key = bcrypt.hashpw(registration_key.encode('utf-8'), bcrypt.gensalt())
+    cursor.execute(
+        "INSERT INTO Registration (userid, emailOTP, registrationkey, created, updated) VALUES (?, ?, ?, ?, ?)",
+        (user_id, otp, hashed_registration_key, created, updated)
+    )
+    send_registration_email(email, otp, registration_key)
+    return {"success": True}
+
+def put_user(cursor, data):
+    user_id = data.get('id')
+    firstname = data.get('firstname')
+    lastname = data.get('lastname')
+    username = data.get('username')
+    password = data.get('password')
+    email = data.get('email')
+    orgname = data.get('orgname')
+    isEmailVerified = data.get('isEmailVerified', 0)
+    isRegistered = data.get('isRegistered', 0)
+    updated = data.get('updated')
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()) if password else None
+    if hashed_password:
+        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, password=?, email=?, orgname=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, hashed_password, email, orgname, isEmailVerified, isRegistered, updated, user_id))
+    else:
+        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, email=?, orgname=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, email, orgname, isEmailVerified, isRegistered, updated, user_id))
+
+def delete_user(cursor, data):
+    user_id = data.get('id')
+    cursor.execute("DELETE FROM Users WHERE id=?", (user_id,))
+
+def get_registrations(cursor):
+    cursor.execute("SELECT id, userid, emailOTP, registrationkey, created, updated FROM Registration")
+    rows = cursor.fetchall()
+    return [{
+        "id": row[0],
+        "userid": row[1],
+        "emailOTP": row[2],
+        "registrationkey": row[3],
+        "created": row[4],
+        "updated": row[5]
+    } for row in rows]
+
+def post_registration(cursor, data):
+    userid = data.get('userid')
+    emailOTP = data.get('emailOTP')
+    registrationkey = data.get('registrationkey')
+    created = data.get('created')
+    updated = data.get('updated')
+    cursor.execute(
+        "INSERT INTO Registration (userid, emailOTP, registrationkey, created, updated) VALUES (?, ?, ?, ?, ?)",
+        (userid, emailOTP, registrationkey, created, updated)
+    )
+
+def put_registration(cursor, data):
+    reg_id = data.get('id')
+    userid = data.get('userid')
+    emailOTP = data.get('emailOTP')
+    registrationkey = data.get('registrationkey')
+    updated = data.get('updated')
+    cursor.execute(
+        "UPDATE Registration SET userid=?, emailOTP=?, registrationkey=?, updated=? WHERE id=?",
+        (userid, emailOTP, registrationkey, updated, reg_id)
+    )
+
+def delete_registration(cursor, data):
+    reg_id = data.get('id')
+    cursor.execute("DELETE FROM Registration WHERE id=?", (reg_id,))
+
+@app.route('/api/users', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def crud_users():
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(error=f"Database file not found: {db_path}"), 404
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    if request.method == 'GET':
+        result = get_users(cursor)
+        conn.close()
+        return jsonify(users=result)
+    elif request.method == 'POST':
+        data = request.json
+        post_user(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    elif request.method == 'PUT':
+        data = request.json
+        put_user(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    elif request.method == 'DELETE':
+        data = request.json
+        delete_user(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+
+@app.route('/api/registrations', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def crud_registrations():
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(error=f"Database file not found: {db_path}"), 404
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    if request.method == 'GET':
+        result = get_registrations(cursor)
+        conn.close()
+        return jsonify(registrations=result)
+    elif request.method == 'POST':
+        data = request.json
+        post_registration(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    elif request.method == 'PUT':
+        data = request.json
+        put_registration(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    elif request.method == 'DELETE':
+        data = request.json
+        delete_registration(cursor, data)
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(error=f"Database file not found: {db_path}"), 404
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    registration_key = data.get('registrationkey')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, password, isRegistered FROM Users WHERE username=?", (username,))
+    row = cursor.fetchone()
+    if row:
+        user_id, hashed_password, isRegistered = row
+        cursor.execute("SELECT registrationkey FROM Registration WHERE userid=?", (user_id,))
+        reg_row = cursor.fetchone()
+        conn.close()
+        if not isRegistered:
+            return jsonify(success=False, error="User is not registered"), 403
+        if not reg_row or reg_row[0] != registration_key:
+            return jsonify(success=False, error="Invalid registration key"), 401
+        if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
+            return jsonify(success=True, user_id=user_id)
+        else:
+            return jsonify(success=False, error="Invalid password"), 401
+    else:
+        conn.close()
+        return jsonify(success=False, error="User not found"), 404
+
+@app.route('/api/verify', methods=['POST'])
+def verify_user():
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(error=f"Database file not found: {db_path}"), 404
+    data = request.json
+    email = data.get('email')
+    otp = data.get('otp')
+    registration_key = data.get('registrationkey')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM Users WHERE email=?", (email,))
+    user_row = cursor.fetchone()
+    if not user_row:
+        conn.close()
+        return jsonify(success=False, error="User not found"), 404
+    user_id = user_row[0]
+    cursor.execute("SELECT emailOTP, registrationkey FROM Registration WHERE userid=?", (user_id,))
+    reg_row = cursor.fetchone()
+    if not reg_row:
+        conn.close()
+        return jsonify(success=False, error="Registration not found"), 404
+    db_otp, db_registration_key = reg_row
+    if str(db_otp) == str(otp) and bcrypt.checkpw(registration_key.encode('utf-8'), db_registration_key):
+        cursor.execute("UPDATE Users SET isRegistered=1, isEmailVerified=1 WHERE id=?", (user_id,))
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    else:
+        conn.close()
+        return jsonify(success=False, error="Invalid OTP or registration key"), 401
+
+def send_registration_email(to_email, otp, registration_key):
+    # Configure your SMTP server details
+    SMTP_SERVER = 'smtp.gmail.com'  # Replace with your SMTP server
+    SMTP_PORT = 587
+    SMTP_USERNAME = 'bengie.dulay@gmail.com'  # Replace with your email
+    SMTP_PASSWORD = 'mggv tlgu wxad munf'  # Replace with your password
+
+    msg = EmailMessage()
+    msg['Subject'] = 'Your Registration OTP and Key'
+    msg['From'] = SMTP_USERNAME
+    msg['To'] = to_email
+    msg.set_content(f"""
+    Thank you for signing up!
+    Your OTP: {otp}
+    Your Registration Key: {registration_key}
+    """)
+
+    try:
+        print(f"Connecting to SMTP server: {SMTP_SERVER}:{SMTP_PORT}")
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            print("Starting TLS...")
+            server.starttls()
+            print("Logging in...")
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            print("Sending email...")
+            server.send_message(msg)
+            print("Email sent successfully!")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
