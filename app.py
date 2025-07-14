@@ -32,7 +32,29 @@ def list_translations():
         # Folder does not exist, return empty list
         return jsonify(translations=[])
     files = [f for f in os.listdir(db_folder) if f.endswith('.SQLite3')]
-    translations = [f.replace('.SQLite3', '') for f in files]
+    translations = []
+    for f in files:
+        translation_name = f.replace('.SQLite3', '')
+        db_path = os.path.join(db_folder, f)
+        language = None
+        try:
+            conn = sqlite3.connect(db_path)
+            print(f"Successfully connected to database: {db_path}")
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM info WHERE name='language' LIMIT 1")
+            row = cursor.fetchone()
+            print(f"Row fetched from info table (language): {row}")
+            if row and row[0]:
+                language = row[0]
+            conn.close()
+        except Exception as e:
+            print(f"Exception for {translation_name}: {e}")
+            language = None
+        print(f"Translation: {translation_name}, Language: {language}")
+        translations.append({
+            "name": translation_name,
+            "language": language
+        })
     return jsonify(translations=translations)
 
 @app.route('/api/verses/<translation>')
