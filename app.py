@@ -301,7 +301,7 @@ def login():
         conn.close()
         if not isRegistered:
             return jsonify(success=False, error="User is not registered"), 403
-        if not reg_row or reg_row[0] != registration_key:
+        if not reg_row or not bcrypt.checkpw(registration_key.encode('utf-8'), reg_row[0]):
             return jsonify(success=False, error="Invalid registration key"), 401
         if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
             return jsonify(success=True, user_id=user_id)
