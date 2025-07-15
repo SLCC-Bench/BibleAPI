@@ -352,14 +352,41 @@ def send_registration_email(to_email, otp, registration_key):
     SMTP_PASSWORD = 'mggv tlgu wxad munf'  # Replace with your password
 
     msg = EmailMessage()
-    msg['Subject'] = 'Your Registration OTP and Key'
+    msg['Subject'] = 'Welcome to SLCC Bible API - Registration Details'
     msg['From'] = SMTP_USERNAME
     msg['To'] = to_email
-    msg.set_content(f"""
-    Thank you for signing up!
-    Your OTP: {otp}
-    Your Registration Key: {registration_key}
-    """)
+
+    # HTML email body with inline image
+    html_content = f"""
+    <html>
+    <body style='font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;'>
+        <div style='max-width: 500px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #eee; padding: 30px;'>
+            <div style='text-align: center;'>
+                <img src='cid:iconimage' alt='SLCC Bible API' style='width:64px;height:64px;margin-bottom:20px;'>
+            </div>
+            <h2 style='color: #2c3e50;'>Welcome to SLCC Bible API!</h2>
+            <p>Thank you for signing up. Please use the details below to complete your registration:</p>
+            <table style='width:100%;margin:20px 0;'>
+                <tr><td style='font-weight:bold;'>OTP:</td><td>{otp}</td></tr>
+                <tr><td style='font-weight:bold;'>Registration Key:</td><td>{registration_key}</td></tr>
+            </table>
+            <p>If you did not request this registration, please ignore this email.</p>
+            <hr style='margin:30px 0;'>
+            <p style='font-size:12px;color:#888;'>SLCC Bible API &copy; 2024</p>
+        </div>
+    </body>
+    </html>
+    """
+    msg.set_content("Thank you for signing up! Your OTP and registration key are included in this email.")
+    msg.add_alternative(html_content, subtype='html')
+
+    # Attach icon.ico as inline image
+    icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
+    try:
+        with open(icon_path, 'rb') as img:
+            msg.get_payload()[1].add_related(img.read(), 'image', 'x-icon', cid='iconimage')
+    except Exception as e:
+        print(f"Could not attach icon.ico: {e}")
 
     try:
         print(f"Connecting to SMTP server: {SMTP_SERVER}:{SMTP_PORT}")
@@ -373,6 +400,42 @@ def send_registration_email(to_email, otp, registration_key):
             print("Email sent successfully!")
     except Exception as e:
         print(f"Failed to send email: {e}")
+
+@app.route('/api/profile', methods=['POST'])
+def get_profile():
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(error=f"Database file not found: {db_path}"), 404
+    data = request.json
+    user_id = data.get('user_id')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT firstname, lastname, email, orgname, username, password, isRegistered, isEmailVerified FROM Users WHERE id=?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify(error="User not found"), 404
+    fullname = f"{row[0]} {row[1]}"
+    email = row[2]
+    orgname = row[3]
+    username = row[4]
+    password_masked = "********"
+    is_registered = row[6]
+    is_email_verified = row[7]
+    registration_key_masked = "********" if is_registered else ""
+    profile = {
+        "Fullname": fullname,
+        "Email": email,
+        "Organization Name": orgname,
+        "Username": username,
+        "Password": password_masked,
+        "Registration key": registration_key_masked,
+        "Email Verified": bool(is_email_verified),
+        "Has Registration Key": bool(is_registered)
+    }
+    conn.close()
+    return jsonify(profile)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
