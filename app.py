@@ -344,19 +344,15 @@ def verify_user():
         conn.close()
         return jsonify(success=False, error="Invalid OTP or registration key"), 401
 
-def send_registration_email(to_email, otp, registration_key):
-    # Configure your SMTP server details
-    SMTP_SERVER = 'smtp.gmail.com'  # Replace with your SMTP server
+def send_professional_email(to_email, subject, heading, message, action_text, action_link):
+    SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
-    SMTP_USERNAME = 'bengie.dulay@gmail.com'  # Replace with your email
-    SMTP_PASSWORD = 'mggv tlgu wxad munf'  # Replace with your password
-
+    SMTP_USERNAME = 'bengie.dulay@gmail.com'
+    SMTP_PASSWORD = 'mggv tlgu wxad munf'
     msg = EmailMessage()
-    msg['Subject'] = 'Welcome to SLCC Bible API - Registration Details'
+    msg['Subject'] = subject
     msg['From'] = SMTP_USERNAME
     msg['To'] = to_email
-
-    # HTML email body with inline image
     html_content = f"""
     <html>
     <body style='font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;'>
@@ -364,42 +360,59 @@ def send_registration_email(to_email, otp, registration_key):
             <div style='text-align: center;'>
                 <img src='cid:iconimage' alt='SLCC Bible API' style='width:64px;height:64px;margin-bottom:20px;'>
             </div>
-            <h2 style='color: #2c3e50;'>Welcome to SLCC Bible API!</h2>
-            <p>Thank you for signing up. Please use the details below to complete your registration:</p>
-            <table style='width:100%;margin:20px 0;'>
-                <tr><td style='font-weight:bold;'>OTP:</td><td>{otp}</td></tr>
-                <tr><td style='font-weight:bold;'>Registration Key:</td><td>{registration_key}</td></tr>
-            </table>
-            <p>If you did not request this registration, please ignore this email.</p>
+            <h2 style='color: #2c3e50;'>{heading}</h2>
+            <p>{message}</p>
+            <div style='text-align:center;margin:30px 0;'>
+                <a href='{action_link}' style='background:#2980b9;color:#fff;padding:12px 24px;border-radius:5px;text-decoration:none;font-weight:bold;font-size:16px;'>{action_text}</a>
+            </div>
             <hr style='margin:30px 0;'>
             <p style='font-size:12px;color:#888;'>SLCC Bible API &copy; 2024</p>
         </div>
     </body>
     </html>
     """
-    msg.set_content("Thank you for signing up! Your OTP and registration key are included in this email.")
+    msg.set_content(f"{heading}\n{message}\n{action_text}: {action_link}")
     msg.add_alternative(html_content, subtype='html')
-
-    # Attach icon.ico as inline image
     icon_path = os.path.join(os.path.dirname(__file__), 'icon.ico')
     try:
         with open(icon_path, 'rb') as img:
             msg.get_payload()[1].add_related(img.read(), 'image', 'x-icon', cid='iconimage')
     except Exception as e:
         print(f"Could not attach icon.ico: {e}")
-
     try:
-        print(f"Connecting to SMTP server: {SMTP_SERVER}:{SMTP_PORT}")
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            print("Starting TLS...")
             server.starttls()
-            print("Logging in...")
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            print("Sending email...")
             server.send_message(msg)
-            print("Email sent successfully!")
     except Exception as e:
         print(f"Failed to send email: {e}")
+
+# Update send_registration_email to use the new function
+
+def send_registration_email(to_email, otp, registration_key):
+    registration_message = f"Thank you for signing up. Please use the details below to complete your registration:<br><br>"
+    registration_message += f"<b>OTP:</b> {otp}<br><b>Registration Key:</b> {registration_key}<br><br>If you did not request this registration, please ignore this email."
+    send_professional_email(
+        to_email,
+        'Welcome to SLCC Bible API - Registration Details',
+        'Welcome to SLCC Bible API!',
+        registration_message,
+        'Complete Registration',
+        'https://yourdomain.com/verify'  # You can update this to your actual verification page
+    )
+
+# Update send_password_reset_email to use the new function
+
+def send_password_reset_email(to_email, reset_link):
+    reset_message = "Click the button below to reset your password. If you did not request a password reset, please ignore this email."
+    send_professional_email(
+        to_email,
+        'SLCC Bible API - Password Reset Request',
+        'Password Reset Request',
+        reset_message,
+        'Reset Password',
+        reset_link
+    )
 
 @app.route('/api/profile', methods=['POST'])
 def get_profile():
@@ -436,6 +449,151 @@ def get_profile():
     }
     conn.close()
     return jsonify(profile)
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    data = request.json
+    email = data.get('email')
+    token = data.get('token')
+    new_password = data.get('new_password')
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(success=False, error=f"Database file not found: {db_path}"), 404
+    if not email or not token or not new_password:
+        return jsonify(success=False, error="Missing required fields"), 400
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # Ensure PasswordReset table has 'used' column
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS PasswordReset (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userid INTEGER,
+            email TEXT,
+            token TEXT,
+            created DATETIME DEFAULT CURRENT_TIMESTAMP,
+            used INTEGER DEFAULT 0
+        )
+    """)
+    # Validate token from PasswordReset table (get most recent, not used, not expired)
+    cursor.execute("""
+        SELECT id, userid, token, created, used FROM PasswordReset
+        WHERE email=? AND used=0
+        ORDER BY created DESC LIMIT 1
+    """, (email,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify(success=False, error="User or token not found or already used"), 404
+    reset_id, user_id, db_token, created, used = row
+    # Check expiration (5 minutes)
+    import datetime
+    created_time = datetime.datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
+    if (datetime.datetime.utcnow() - created_time).total_seconds() > 300:
+        conn.close()
+        return jsonify(success=False, error="Reset link expired"), 400
+    if not bcrypt.checkpw(token.encode('utf-8'), db_token):
+        conn.close()
+        return jsonify(success=False, error="Invalid token"), 401
+    # Update password
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+    cursor.execute("UPDATE Users SET password=? WHERE id=?", (hashed_password, user_id))
+    # Mark token as used
+    cursor.execute("UPDATE PasswordReset SET used=1 WHERE id=?", (reset_id,))
+    conn.commit()
+    conn.close()
+    return jsonify(success=True)
+
+@app.route('/api/request-password-reset', methods=['POST'])
+def request_password_reset():
+    data = request.json
+    email = data.get('email')
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(success=False, error=f"Database file not found: {db_path}"), 404
+    if not email:
+        return jsonify(success=False, error="Email is required"), 400
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # Ensure PasswordReset table has 'used' column
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS PasswordReset (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userid INTEGER,
+            email TEXT,
+            token TEXT,
+            created DATETIME DEFAULT CURRENT_TIMESTAMP,
+            used INTEGER DEFAULT 0
+        )
+    """)
+    cursor.execute("SELECT id FROM Users WHERE email=?", (email,))
+    user_row = cursor.fetchone()
+    if not user_row:
+        conn.close()
+        return jsonify(success=False, error="Email not found"), 404
+    user_id = user_row[0]
+    # Generate a secure token
+    reset_token = generate_registration_key(48)
+    hashed_token = bcrypt.hashpw(reset_token.encode('utf-8'), bcrypt.gensalt())
+    # Save token
+    cursor.execute("INSERT INTO PasswordReset (userid, email, token, used) VALUES (?, ?, ?, 0)", (user_id, email, hashed_token))
+    conn.commit()
+    conn.close()
+    # Send email with reset link (use /static/)
+    reset_link = f"http://127.0.0.1:5000/static/reset_password.html?email={email}&token={reset_token}"
+    send_password_reset_email(email, reset_link)
+    return jsonify(success=True)
+
+# Add this helper function
+
+def send_password_reset_email(to_email, reset_link):
+    reset_message = "Click the button below to reset your password. If you did not request a password reset, please ignore this email."
+    send_professional_email(
+        to_email,
+        'SLCC Bible API - Password Reset Request',
+        'Password Reset Request',
+        reset_message,
+        'Reset Password',
+        reset_link
+    )
+
+@app.route('/api/check-reset-token', methods=['POST'])
+def check_reset_token():
+    data = request.json
+    email = data.get('email')
+    token = data.get('token')
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if not os.path.exists(db_path):
+        return jsonify(success=False, error="Database file not found"), 404
+    if not email or not token:
+        return jsonify(success=False, error="Missing required fields"), 400
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, token, created, used FROM PasswordReset
+        WHERE email=? ORDER BY created DESC LIMIT 1
+    """, (email,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify(success=False, error="Token not found"), 404
+    reset_id, db_token, created, used = row
+    import datetime
+    created_time = datetime.datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
+    expired = (datetime.datetime.utcnow() - created_time).total_seconds() > 300
+    if used == 1:
+        conn.close()
+        return jsonify(success=False, error="This reset link has already been used.", used=True, expired=expired)
+    if expired:
+        conn.close()
+        return jsonify(success=False, error="This reset link has expired.", expired=True, used=used)
+    if not bcrypt.checkpw(token.encode('utf-8'), db_token):
+        conn.close()
+        return jsonify(success=False, error="Invalid reset link.", invalid=True, used=used, expired=expired)
+    conn.close()
+    return jsonify(success=True, used=used, expired=expired)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
