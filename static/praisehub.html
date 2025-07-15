@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Praisehub</title>
+    <link rel="icon" type="image/x-icon" href="/static/icon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 mt-10">
+        <div class="flex flex-col items-center mb-6">
+            <img src="/static/icon.ico" alt="SLCC Bible API" class="w-16 h-16 mb-2">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2" id="mainTitle">Message</h2>
+        </div>
+        <div id="mainMessage" class="text-center text-lg text-gray-700 mb-4">{MESSAGE}</div>
+        <button id="goToEmailBtn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition duration-150 mb-2">Go to your Email</button>
+        <form id="resetForm" class="space-y-4" style="display:none;">
+            <input type="password" id="newPassword" placeholder="New Password" required minlength="6" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <input type="password" id="confirmPassword" placeholder="Confirm Password" required minlength="6" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <div id="passwordRequirements" class="text-sm mt-2 mb-2" style="display:none;">
+                <ul class="list-disc pl-5" id="requirementsList">
+                    <li id="req-length" class="font-bold text-red-600">At least 8 characters</li>
+                    <li id="req-uppercase" class="font-bold text-red-600">At least 1 uppercase letter</li>
+                    <li id="req-number" class="font-bold text-red-600">At least 1 number</li>
+                    <li id="req-special" class="font-bold text-red-600">At least 1 special character</li>
+                </ul>
+            </div>
+            <input type="submit" value="Change Password" class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition duration-150">
+        </form>
+        <div class="msg text-center mt-4 min-h-[24px] text-red-600 font-medium" id="msg"></div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        const email = params.get('email');
+        const token = params.get('token');
+        const form = document.getElementById('resetForm');
+        const msg = document.getElementById('msg');
+        const mainMessage = document.getElementById('mainMessage');
+        const goToEmailBtn = document.getElementById('goToEmailBtn');
+        const mainTitle = document.getElementById('mainTitle');
+
+        const defaultMessage = 'Your action was successful.';
+        console.log('mainMessage:', mainMessage.textContent);
+        if (mainMessage.textContent && mainMessage.textContent.trim() !== '' && mainMessage.textContent !== defaultMessage && mainMessage.textContent !== '{MESSAGE}') {
+            form.style.display = 'none';
+            if (mainMessage.textContent.toLowerCase().includes('verified')) {
+                goToEmailBtn.style.display = '';
+                mainTitle.textContent = 'Verification';
+            } else if (mainMessage.textContent.toLowerCase().includes('reset')) {
+                goToEmailBtn.style.display = 'none';
+                mainTitle.textContent = 'Reset Password';
+            } else {
+                goToEmailBtn.style.display = '';
+                mainTitle.textContent = 'Message';
+            }
+            return; // Prevent any further logic from running
+        } else if (email && token) {
+            // Password reset mode
+            form.style.display = '';
+            goToEmailBtn.style.display = 'none';
+            mainTitle.textContent = 'Reset Password';
+            mainMessage.textContent = '';
+            // Check token validity on load
+            async function checkToken() {
+                if (!email || !token) {
+                    msg.textContent = "Invalid reset link.";
+                    form.style.display = 'none';
+                    return;
+                }
+                const response = await fetch('/api/check-reset-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, token })
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    // Only show password reset errors if mainMessage is not already set by backend
+                    if (!mainMessage.textContent || mainMessage.textContent === '{MESSAGE}') {
+                        mainMessage.textContent = '';
+                        if (result.expired) {
+                            msg.textContent = "This reset link has expired. Please request a new password reset.";
+                        } else if (result.used) {
+                            msg.textContent = "This reset link has already been used. Please request a new password reset if needed.";
+                        } else if (result.invalid) {
+                            msg.textContent = "Invalid reset link. Please check your email or request a new reset.";
+                        } else {
+                            msg.textContent = result.error || "Invalid or expired reset link.";
+                        }
+                    }
+                    form.style.display = 'none';
+                }
+            }
+            checkToken();
+            const passwordRequirements = [
+                { regex: /.{8,}/, message: "At least 8 characters", id: "req-length" },
+                { regex: /[A-Z]/, message: "At least 1 uppercase letter", id: "req-uppercase" },
+                { regex: /[0-9]/, message: "At least 1 number", id: "req-number" },
+                { regex: /[^A-Za-z0-9]/, message: "At least 1 special character", id: "req-special" }
+            ];
+            const newPasswordInput = document.getElementById('newPassword');
+            function updateRequirementsDisplay() {
+                const value = newPasswordInput.value;
+                const reqDiv = document.getElementById('passwordRequirements');
+                if (!value) {
+                    reqDiv.style.display = 'none';
+                    return;
+                } else {
+                    reqDiv.style.display = '';
+                }
+                for (const req of passwordRequirements) {
+                    const el = document.getElementById(req.id);
+                    if (req.regex.test(value)) {
+                        el.classList.remove('text-red-600');
+                        el.classList.add('text-green-600');
+                        el.classList.add('font-bold');
+                    } else {
+                        el.classList.remove('text-green-600');
+                        el.classList.add('text-red-600');
+                        el.classList.add('font-bold');
+                    }
+                }
+            }
+            newPasswordInput.addEventListener('input', updateRequirementsDisplay);
+            updateRequirementsDisplay();
+            form.onsubmit = async function(e) {
+                e.preventDefault();
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                msg.textContent = "";
+                for (const req of passwordRequirements) {
+                    if (!req.regex.test(newPassword)) {
+                        msg.textContent = req.message;
+                        return;
+                    }
+                }
+                if (newPassword !== confirmPassword) {
+                    msg.textContent = "Passwords do not match.";
+                    return;
+                }
+                const response = await fetch('/api/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, token, new_password: newPassword })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    msg.className = 'msg text-center mt-4 min-h-[24px] text-green-600 font-medium';
+                    msg.textContent = "Password changed successfully!";
+                    form.style.display = 'none';
+                } else {
+                    msg.className = 'msg text-center mt-4 min-h-[24px] text-red-600 font-medium';
+                    msg.textContent = result.error || "Failed to change password.";
+                }
+            };
+        } else {
+            // Generic info mode
+            form.style.display = 'none';
+            goToEmailBtn.style.display = '';
+            mainTitle.textContent = 'Message';
+            mainMessage.textContent = 'Welcome to Praisehub!';
+        }
+        goToEmailBtn.onclick = function() {
+            const params = new URLSearchParams(window.location.search);
+            const email = params.get('email') || '';
+            let provider = 'gmail';
+            if (email.includes('@yahoo')) provider = 'yahoo';
+            else if (email.includes('@outlook') || email.includes('@hotmail')) provider = 'outlook';
+            let url = 'https://mail.google.com';
+            if (provider === 'yahoo') url = 'https://mail.yahoo.com';
+            if (provider === 'outlook') url = 'https://outlook.live.com';
+            window.open(url, '_blank');
+        };
+    });
+    </script>
+</body>
+</html>
