@@ -289,10 +289,13 @@ def login():
     password = data.get('password')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password FROM Users WHERE username=? OR email=?", (username, username))
+    cursor.execute("SELECT id, password, isEmailVerified FROM Users WHERE username=? OR email=?", (username, username))
     row = cursor.fetchone()
     if row:
-        user_id, hashed_password = row
+        user_id, hashed_password, is_email_verified = row
+        if not is_email_verified:
+            conn.close()
+            return jsonify(success=False, error="Verification is sent to your email. Please verify."), 401
         if bcrypt.checkpw(password.encode('utf-8'), hashed_password):
             conn.close()
             return jsonify(success=True, user_id=user_id)
@@ -301,7 +304,7 @@ def login():
             return jsonify(success=False, error="Invalid password"), 401
     else:
         conn.close()
-        return jsonify(success=False, error="User not found"), 404
+        return jsonify(success=False, error="Username or Password is incorrect."), 404
 
 @app.route('/api/verify', methods=['POST'])
 def verify_user():
@@ -336,6 +339,8 @@ def verify_user():
         return jsonify(success=False, error="Invalid registration key"), 401
 
 def send_professional_email(to_email, subject, heading, message, action_text, action_link):
+    import datetime
+    current_year = datetime.datetime.now().year
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = 'bengie.dulay@gmail.com'
@@ -355,13 +360,13 @@ def send_professional_email(to_email, subject, heading, message, action_text, ac
     <body style='font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;'>
         <div style='max-width: 500px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #eee; padding: 30px;'>
             <div style='text-align: center;'>
-                <img src='cid:iconimage' alt='SLCC Bible API' style='width:64px;height:64px;margin-bottom:20px;'>
+                <img src='cid:iconimage' alt='Praisehub' style='width:64px;height:64px;margin-bottom:20px;'>
             </div>
             <h2 style='color: #2c3e50;'>{heading}</h2>
             <p>{message}</p>
             {button_html}
             <hr style='margin:30px 0;'>
-            <p style='font-size:12px;color:#888;'>SLCC Bible API &copy; 2024</p>
+            <p style='font-size:12px;color:#888;'>Praisehub &copy; {current_year}</p>
         </div>
     </body>
     </html>
@@ -389,8 +394,8 @@ def send_registration_email(to_email, otp, registration_key):
     registration_message += f"<b>OTP:</b> {otp}<br><b>Registration Key:</b> {registration_key}<br><br>If you did not request this registration, please ignore this email."
     send_professional_email(
         to_email,
-        'Welcome to SLCC Bible API - Registration Details',
-        'Welcome to SLCC Bible API!',
+        'Praisehub - Registration Details',
+        'Praisehub!',
         registration_message,
         'Complete Registration',
         'https://yourdomain.com/verify'  # You can update this to your actual verification page
@@ -400,7 +405,7 @@ def send_email_verification(to_email, verification_link):
     verification_message = "Click the button below to verify your email address."
     send_professional_email(
         to_email,
-        'SLCC Bible API - Email Verification',
+        'Praisehub - Email Verification',
         'Verify Your Email',
         verification_message,
         'Verify Email',
@@ -450,14 +455,14 @@ def verify_email():
         conn.close()
         return open(html_path).read().replace('{MESSAGE}', 'User not found.'), 200, {'Content-Type': 'text/html'}
     user_id, is_verified = user_row
+    if is_verified:
+        conn.close()
+        return open(html_path).read().replace('{MESSAGE}', 'Email already verified. You may close this page.'), 200, {'Content-Type': 'text/html'}
     cursor.execute("SELECT registrationkey FROM Registration WHERE userid=?", (user_id,))
     reg_row = cursor.fetchone()
     if not reg_row or reg_row[0] != token:
         conn.close()
         return open(html_path).read().replace('{MESSAGE}', 'Invalid verification link.'), 200, {'Content-Type': 'text/html'}
-    if is_verified:
-        conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'Email already verified. You may close this page.'), 200, {'Content-Type': 'text/html'}
     cursor.execute("UPDATE Users SET isEmailVerified=1 WHERE id=?", (user_id,))
     conn.commit()
     # Send registration key email
@@ -611,7 +616,7 @@ def send_password_reset_email(to_email, reset_link):
     reset_message = "Click the button below to reset your password. If you did not request a password reset, please ignore this email."
     send_professional_email(
         to_email,
-        'SLCC Bible API - Password Reset Request',
+        'Praisehub - Password Reset Request',
         'Password Reset Request',
         reset_message,
         'Reset Password',
