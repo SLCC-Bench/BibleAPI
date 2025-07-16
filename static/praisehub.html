@@ -40,27 +40,26 @@
         const goToEmailBtn = document.getElementById('goToEmailBtn');
         const mainTitle = document.getElementById('mainTitle');
 
-        const defaultMessage = 'Your action was successful.';
-        console.log('mainMessage:', mainMessage.textContent);
-        if (mainMessage.textContent && mainMessage.textContent.trim() !== '' && mainMessage.textContent !== defaultMessage && mainMessage.textContent !== '{MESSAGE}') {
+        const messageText = mainMessage.textContent.trim().toLowerCase();
+
+        console.log(messageText);
+
+        if (messageText.includes('verified')) {
+            // Email verification success or already verified
             form.style.display = 'none';
-            if (mainMessage.textContent.toLowerCase().includes('verified')) {
-                goToEmailBtn.style.display = '';
-                mainTitle.textContent = 'Verification';
-            } else if (mainMessage.textContent.toLowerCase().includes('reset')) {
-                goToEmailBtn.style.display = 'none';
-                mainTitle.textContent = 'Reset Password';
-            } else {
-                goToEmailBtn.style.display = '';
-                mainTitle.textContent = 'Message';
-            }
-            return; // Prevent any further logic from running
-        } else if (email && token) {
+            goToEmailBtn.style.display = '';
+            mainTitle.textContent = 'Verification';
+        } else if (messageText.includes('already verified')) {
+            // Email already verified
+            form.style.display = 'none';
+            goToEmailBtn.style.display = '';
+            mainTitle.textContent = 'Verification';
+        } else if (messageText.includes('reset') || (email && token && (!mainMessage.textContent || mainMessage.textContent === '{MESSAGE}'))) {
             // Password reset mode
             form.style.display = '';
             goToEmailBtn.style.display = 'none';
             mainTitle.textContent = 'Reset Password';
-            mainMessage.textContent = '';
+            if (!messageText.includes('reset')) mainMessage.textContent = '';
             // Check token validity on load
             async function checkToken() {
                 if (!email || !token) {
@@ -75,7 +74,6 @@
                 });
                 const result = await response.json();
                 if (!result.success) {
-                    // Only show password reset errors if mainMessage is not already set by backend
                     if (!mainMessage.textContent || mainMessage.textContent === '{MESSAGE}') {
                         mainMessage.textContent = '';
                         if (result.expired) {
@@ -91,7 +89,7 @@
                     form.style.display = 'none';
                 }
             }
-            checkToken();
+            if (!messageText.includes('reset')) checkToken();
             const passwordRequirements = [
                 { regex: /.{8,}/, message: "At least 8 characters", id: "req-length" },
                 { regex: /[A-Z]/, message: "At least 1 uppercase letter", id: "req-uppercase" },
