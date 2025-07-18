@@ -117,7 +117,7 @@ def load_data(translation):
     return Response(json.dumps({"verses": cleaned_rows}, ensure_ascii=False), mimetype='application/json')
 
 def get_users(cursor):
-    cursor.execute("SELECT id, firstname, lastname, username, email, orgname, isEmailVerified, isRegistered, created, updated FROM Users")
+    cursor.execute("SELECT id, firstname, lastname, username, email, orgname, mobile, isEmailVerified, isRegistered, created, updated FROM Users")
     rows = cursor.fetchall()
     return [{
         "id": row[0],
@@ -126,10 +126,11 @@ def get_users(cursor):
         "username": row[3],
         "email": row[4],
         "orgname": row[5],
-        "isEmailVerified": row[6],
-        "isRegistered": row[7],
-        "created": row[8],
-        "updated": row[9]
+        "mobile": row[6],
+        "isEmailVerified": row[7],
+        "isRegistered": row[8],
+        "created": row[9],
+        "updated": row[10]
     } for row in rows]
 
 def post_user(cursor, data):
@@ -139,14 +140,15 @@ def post_user(cursor, data):
     password = data.get('password')
     email = data.get('email')
     orgname = data.get('orgname')
+    mobile = data.get('mobile')
     isEmailVerified = data.get('isEmailVerified', 0)
     isRegistered = data.get('isRegistered', 0)
     created = data.get('created')
     updated = data.get('updated')
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     cursor.execute(
-        "INSERT INTO Users (firstname, lastname, username, password, email, orgname, isEmailVerified, isRegistered, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (firstname, lastname, username, hashed_password, email, orgname, isEmailVerified, isRegistered, created, updated)
+        "INSERT INTO Users (firstname, lastname, username, password, email, orgname, mobile, isEmailVerified, isRegistered, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (firstname, lastname, username, hashed_password, email, orgname, mobile, isEmailVerified, isRegistered, created, updated)
     )
     user_id = cursor.lastrowid
     registration_key = generate_registration_key()
@@ -165,14 +167,15 @@ def put_user(cursor, data):
     password = data.get('password')
     email = data.get('email')
     orgname = data.get('orgname')
+    mobile = data.get('mobile')
     isEmailVerified = data.get('isEmailVerified', 0)
     isRegistered = data.get('isRegistered', 0)
     updated = data.get('updated')
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()) if password else None
     if hashed_password:
-        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, password=?, email=?, orgname=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, hashed_password, email, orgname, isEmailVerified, isRegistered, updated, user_id))
+        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, password=?, email=?, orgname=?, mobile=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, hashed_password, email, orgname, mobile, isEmailVerified, isRegistered, updated, user_id))
     else:
-        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, email=?, orgname=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, email, orgname, isEmailVerified, isRegistered, updated, user_id))
+        cursor.execute("UPDATE Users SET firstname=?, lastname=?, username=?, email=?, orgname=?, mobile=?, isEmailVerified=?, isRegistered=?, updated=? WHERE id=?", (firstname, lastname, username, email, orgname, mobile, isEmailVerified, isRegistered, updated, user_id))
 
 def delete_user(cursor, data):
     user_id = data.get('id')
@@ -224,14 +227,43 @@ def crud_users():
         return jsonify(error=f"Database file not found: {db_path}"), 404
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    # Ensure Users table has 'mobile' column
+    cursor.execute("""
+        PRAGMA table_info(Users)
+    """)
+    columns = [col[1] for col in cursor.fetchall()]
+    if 'mobile' not in columns:
+        cursor.execute("ALTER TABLE Users ADD COLUMN mobile TEXT")
+        conn.commit()
     if request.method == 'GET':
         result = get_users(cursor)
         conn.close()
         return jsonify(users=result)
     elif request.method == 'POST':
         data = request.json
+        email = data.get('email')
+        mobile = data.get('mobile')
+        # Check for duplicate email or mobile
+        cursor.execute("SELECT id FROM Users WHERE email=? OR mobile=?", (email, mobile))
+        duplicate_row = cursor.fetchone()
+        if duplicate_row:
+            conn.close()
+            return jsonify(success=False, error="Email or mobile number already exists."), 409
         post_user(cursor, data)
         conn.commit()
+        # Send email verification link
+        cursor.execute("SELECT id FROM Users WHERE email=?", (email,))
+        user_row = cursor.fetchone()
+        if user_row:
+            user_id = user_row[0]
+            verification_token = generate_registration_key(32)
+            # Save token in Registration table
+            cursor.execute("UPDATE Registration SET registrationkey=? WHERE userid=?", (verification_token, user_id))
+            conn.commit()
+            verification_link = f"http://127.0.0.1:5000/api/verify-email?email={email}&token={verification_token}"
+            print(f"[DEBUG] About to call send_email_verification for {email} with link: {verification_link}")
+            send_email_verification(email, verification_link)
+            print(f"[DEBUG] send_email_verification finished for {email}")
         conn.close()
         return jsonify(success=True)
     elif request.method == 'PUT':
@@ -493,7 +525,7 @@ def get_profile():
     user_id = data.get('user_id')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT firstname, lastname, email, orgname, username, isRegistered, isEmailVerified FROM Users WHERE id=?", (user_id,))
+    cursor.execute("SELECT firstname, lastname, email, orgname, username, mobile, isRegistered, isEmailVerified FROM Users WHERE id=?", (user_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
@@ -502,13 +534,15 @@ def get_profile():
     email = row[2]
     orgname = row[3]
     username = row[4]
-    is_registered = row[5]
-    is_email_verified = row[6]
+    mobile = row[5]
+    is_registered = row[6]
+    is_email_verified = row[7]
     profile = {
         "Fullname": fullname,
         "Email": email,
         "Organization Name": orgname,
         "Username": username,
+        "Mobile": mobile,
         "Email Verified": bool(is_email_verified),
         "Has Registration Key": bool(is_registered)
     }
@@ -697,6 +731,22 @@ def reset_password_page():
     conn.close()
     # Valid link, show reset form (leave {MESSAGE} for JS)
     return open(html_path).read(), 200, {'Content-Type': 'text/html'}
+
+# Ensure 'mobile' column exists in Users table
+try:
+    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
+    if os.path.exists(db_path):
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(Users)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'mobile' not in columns:
+            cursor.execute("ALTER TABLE Users ADD COLUMN mobile TEXT")
+            conn.commit()
+        conn.close()
+except Exception as e:
+    print(f"[DB MIGRATION] Could not add 'mobile' column: {e}")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
