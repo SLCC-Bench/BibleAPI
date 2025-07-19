@@ -771,7 +771,7 @@ def start_refresher():
                     print(f"[Refresher] Response content: {resp.text}")
             except Exception as e:
                 print(f"[Refresher] Exception: {e}")
-            time.sleep(10)  # selfping every 10 seconds
+            time.sleep(300)  # selfping every 5 minutes
     # Only start refresher in the main process
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("FLASK_RUN_FROM_CLI") == "true" or __name__ == "__main__":
         t = threading.Thread(target=refresher_loop, daemon=True)
