@@ -747,6 +747,5 @@ try:
         conn.close()
 except Exception as e:
     print(f"[DB MIGRATION] Could not add 'mobile' column: {e}")
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
