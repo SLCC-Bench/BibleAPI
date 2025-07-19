@@ -777,8 +777,9 @@ def start_refresher():
         t = threading.Thread(target=refresher_loop, daemon=True)
         t.start()
 
+@app.before_first_request
+def activate_refresher():
+    start_refresher()
+
 if __name__ == "__main__":
-    @app.before_first_request
-    def activate_refresher():
-        start_refresher()
     app.run(host="0.0.0.0", port=5000, debug=True)
