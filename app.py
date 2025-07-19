@@ -758,6 +758,7 @@ def refresher():
 def start_refresher():
     def refresher_loop():
         while True:
+            print("[Refresher] Loop started, about to ping /api/refresher")
             try:
                 # Prefer RENDER_EXTERNAL_URL, fallback to a hardcoded public URL, then localhost
                 url = (
@@ -766,11 +767,15 @@ def start_refresher():
                 ) + "/api/refresher"
                 resp = requests.get(url, timeout=10)
                 print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
+                if resp.status_code != 200:
+                    print(f"[Refresher] Response content: {resp.text}")
             except Exception as e:
                 print(f"[Refresher] Exception: {e}")
-            time.sleep(420)  # selfping every 7 minutes
-    t = threading.Thread(target=refresher_loop, daemon=True)
-    t.start()
+            time.sleep(10)  # selfping every 10 seconds
+    # Only start refresher in the main process
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("FLASK_RUN_FROM_CLI") == "true" or __name__ == "__main__":
+        t = threading.Thread(target=refresher_loop, daemon=True)
+        t.start()
 
 if __name__ == "__main__":
     start_refresher()
