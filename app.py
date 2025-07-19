@@ -759,12 +759,16 @@ def start_refresher():
     def refresher_loop():
         while True:
             try:
-                url = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000") + "/api/refresher"
+                # Prefer RENDER_EXTERNAL_URL, fallback to a hardcoded public URL, then localhost
+                url = (
+                    os.environ.get("RENDER_EXTERNAL_URL") or
+                    "https://bibleapi-uswk.onrender.com"  # <-- replace with your actual Render URL
+                ) + "/api/refresher"
                 resp = requests.get(url, timeout=10)
                 print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
             except Exception as e:
                 print(f"[Refresher] Exception: {e}")
-            time.sleep(300)  # <-- selfping every 5 minutes
+            time.sleep(420)  # selfping every 7 minutes
     t = threading.Thread(target=refresher_loop, daemon=True)
     t.start()
 
