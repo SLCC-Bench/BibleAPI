@@ -760,18 +760,18 @@ def start_refresher():
         while True:
             print("[Refresher] Loop started, about to ping /api/refresher")
             try:
-                # Prefer RENDER_EXTERNAL_URL, fallback to a hardcoded public URL, then localhost
-                url = (
-                    os.environ.get("RENDER_EXTERNAL_URL") or
-                    "https://bibleapi-uswk.onrender.com"  # <-- replace with your actual Render URL
-                ) + "/api/refresher"
+                # Use public URL on Render, fallback to localhost for local dev
+                if os.environ.get("RENDER") == "true" or "onrender.com" in os.environ.get("RENDER_EXTERNAL_URL", ""):
+                    url = "https://bibleapi-uswk.onrender.com/api/refresher"
+                else:
+                    url = "http://127.0.0.1:5000/api/refresher"
                 resp = requests.get(url, timeout=10)
                 print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
                 if resp.status_code != 200:
                     print(f"[Refresher] Response content: {resp.text}")
             except Exception as e:
                 print(f"[Refresher] Exception: {e}")
-            time.sleep(300)  # selfping every 5 minutes
+            time.sleep(420)  # selfping every 7 minutes
     # Only start refresher in the main process
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or os.environ.get("FLASK_RUN_FROM_CLI") == "true" or __name__ == "__main__":
         t = threading.Thread(target=refresher_loop, daemon=True)
