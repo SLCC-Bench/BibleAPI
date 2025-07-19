@@ -758,13 +758,13 @@ def refresher():
 def start_refresher():
     def refresher_loop():
         while True:
-            print("[Refresher] Loop started, about to ping /api/refresher")
+            # Detect if running on Render (production) or local dev
+            if os.environ.get("RENDER") == "true" or os.environ.get("PORT") or "onrender.com" in os.environ.get("RENDER_EXTERNAL_URL", ""):
+                url = "https://bibleapi-uswk.onrender.com/api/refresher"
+            else:
+                url = "http://127.0.0.1:5000/api/refresher"
+            print(f"[Refresher] About to ping: {url}")
             try:
-                # Use public URL on Render, fallback to localhost for local dev
-                if os.environ.get("RENDER") == "true" or "onrender.com" in os.environ.get("RENDER_EXTERNAL_URL", ""):
-                    url = "https://bibleapi-uswk.onrender.com/api/refresher"
-                else:
-                    url = "http://127.0.0.1:5000/api/refresher"
                 resp = requests.get(url, timeout=10)
                 print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
                 if resp.status_code != 200:
