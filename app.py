@@ -8,6 +8,9 @@ import random
 import string
 import smtplib
 from email.message import EmailMessage
+import threading
+import time
+import requests
 
 app = Flask(__name__)
 
@@ -747,5 +750,24 @@ try:
         conn.close()
 except Exception as e:
     print(f"[DB MIGRATION] Could not add 'mobile' column: {e}")
+
+@app.route('/api/refresher')
+def refresher():
+    return jsonify({"status": "ok", "message": "Refresher ping successful."})
+
+def start_refresher():
+    def refresher_loop():
+        while True:
+            try:
+                url = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000") + "/api/refresher"
+                resp = requests.get(url, timeout=10)
+                print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
+            except Exception as e:
+                print(f"[Refresher] Exception: {e}")
+            time.sleep(300)  # <-- selfping every 5 minutes
+    t = threading.Thread(target=refresher_loop, daemon=True)
+    t.start()
+
 if __name__ == "__main__":
+    start_refresher()
     app.run(host="0.0.0.0", port=5000, debug=True)
