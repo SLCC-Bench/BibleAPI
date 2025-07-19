@@ -778,5 +778,7 @@ def start_refresher():
         t.start()
 
 if __name__ == "__main__":
-    start_refresher()
+    @app.before_first_request
+    def activate_refresher():
+        start_refresher()
     app.run(host="0.0.0.0", port=5000, debug=True)
