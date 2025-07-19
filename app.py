@@ -751,37 +751,5 @@ try:
 except Exception as e:
     print(f"[DB MIGRATION] Could not add 'mobile' column: {e}")
 
-@app.route('/api/refresher')
-def refresher():
-    global refresher_started
-    with refresher_lock:
-        if not refresher_started:
-            start_refresher()
-            refresher_started = True
-    return jsonify({"status": "ok", "message": "Refresher ping successful."})
-
-refresher_started = False
-refresher_lock = threading.Lock()
-
-def start_refresher():
-    def refresher_loop():
-        while True:
-            # Use public URL on Render, fallback to localhost for local dev
-            if os.environ.get("PORT"):
-                url = "https://bibleapi-uswk.onrender.com/api/refresher"
-            else:
-                url = "http://127.0.0.1:5000/api/refresher"
-            print(f"[Refresher] About to ping: {url}")
-            try:
-                resp = requests.get(url, timeout=10)
-                print(f"[Refresher] Pinged {url}, status: {resp.status_code}")
-                if resp.status_code != 200:
-                    print(f"[Refresher] Response content: {resp.text}")
-            except Exception as e:
-                print(f"[Refresher] Exception: {e}")
-            time.sleep(20)  # selfping every 20 seconds
-    t = threading.Thread(target=refresher_loop, daemon=True)
-    t.start()
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
