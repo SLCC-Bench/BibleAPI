@@ -80,7 +80,7 @@ def load_data(translation):
                 verses.text AS Verse
             FROM verses
             JOIN books ON verses.book_number = books.book_number
-            ORDER BY verses.book_number, verses.chapter, CAST(verses.verse AS INTEGER)
+            ORDER BY verses.book_number, CAST(verses.chapter AS INTEGER), CAST(verses.verse AS INTEGER)
         """
         cursor.execute(query, (translation,))
         rows = cursor.fetchall()
