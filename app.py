@@ -14,6 +14,9 @@ import requests
 
 app = Flask(__name__)
 
+# Set the base URL for all external links
+BASE_URL = "https://bibleapi-uswk.onrender.com"
+
 def generate_otp(length=6):
     return random.randint(100000, 999999)
 
@@ -263,7 +266,7 @@ def crud_users():
             # Save token in Registration table
             cursor.execute("UPDATE Registration SET registrationkey=? WHERE userid=?", (verification_token, user_id))
             conn.commit()
-            verification_link = f"https://bibleapi-uswk.onrender.com/api/verify-email?email={email}&token={verification_token}"
+            verification_link = f"{BASE_URL}/api/verify-email?email={email}&token={verification_token}"
             print(f"[DEBUG] About to call send_email_verification for {email} with link: {verification_link}")
             send_email_verification(email, verification_link)
             print(f"[DEBUG] send_email_verification finished for {email}")
@@ -468,7 +471,7 @@ def register():
         # Save token in Registration table
         cursor.execute("UPDATE Registration SET registrationkey=? WHERE userid=?", (verification_token, user_id))
         conn.commit()
-        verification_link = f"https://bibleapi-uswk.onrender.com/api/verify-email?email={email}&token={verification_token}"
+        verification_link = f"{BASE_URL}/api/verify-email?email={email}&token={verification_token}"
         send_email_verification(email, verification_link)
     conn.close()
     return jsonify(success=True)
@@ -643,7 +646,7 @@ def request_password_reset():
     conn.commit()
     conn.close()
     # Send email with reset link (use /static/)
-    reset_link = f"https://bibleapi-uswk.onrender.com/static/praisehub.html?email={email}&token={reset_token}"
+    reset_link = f"{BASE_URL}/static/praisehub.html?email={email}&token={reset_token}"
     send_password_reset_email(email, reset_link)
     return jsonify(success=True)
 
