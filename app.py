@@ -15,8 +15,8 @@ import requests
 app = Flask(__name__)
 
 # Set the base URL for all external links
-BASE_URL = "https://bibleapi-uswk.onrender.com"
-# BASE_URL = "http://127.0.0.1:5000"  # Update this to your local or production URL as needed
+# BASE_URL = "https://bibleapi-uswk.onrender.com"
+BASE_URL = "http://127.0.0.1:5000"  # Update this to your local or production URL as needed
 
 def generate_otp(length=6):
     return random.randint(100000, 999999)
@@ -108,6 +108,8 @@ def load_data(translation):
             verse_text = ''
         # Remove <S> tags with Strong's numbers
         verse_text = re.sub(r'<S>[\d\s,]+<\/S>', '', verse_text)
+        # Remove <n>...</n> tags and their contents
+        verse_text = re.sub(r'<n>.*?<\/n>', '', verse_text, flags=re.DOTALL)
         # Remove <p ...> tags (including <p> and <p ...>)
         verse_text = re.sub(r'<p[^>]*>', '', verse_text, flags=re.IGNORECASE)
         verse_text = re.sub(r'</p>', '', verse_text, flags=re.IGNORECASE)
@@ -498,23 +500,23 @@ def verify_email():
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     html_path = os.path.join(os.path.dirname(__file__), 'static', 'praisehub.html')
     if not os.path.exists(db_path):
-        return open(html_path).read().replace('{MESSAGE}', 'Database file not found.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Database file not found.'), 200, {'Content-Type': 'text/html'}
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT id, isEmailVerified FROM Users WHERE email=?", (email,))
     user_row = cursor.fetchone()
     if not user_row:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'User not found.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'User not found.'), 200, {'Content-Type': 'text/html'}
     user_id, is_verified = user_row
     if is_verified:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'Email already verified. You may close this page.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Email already verified. You may close this page.'), 200, {'Content-Type': 'text/html'}
     cursor.execute("SELECT registrationkey FROM Registration WHERE userid=?", (user_id,))
     reg_row = cursor.fetchone()
     if not reg_row or reg_row[0] != token:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'Invalid verification link.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Invalid verification link.'), 200, {'Content-Type': 'text/html'}
     cursor.execute("UPDATE Users SET isEmailVerified=1 WHERE id=?", (user_id,))
     conn.commit()
     # Send registration key email
@@ -531,7 +533,7 @@ def verify_email():
         ''
     )
     conn.close()
-    html = open(html_path).read()
+    html = open(html_path, encoding="utf-8").read()
     html = html.replace('{MESSAGE}', 'Email verified and registration key sent. You may close this page.')
     return html, 200, {'Content-Type': 'text/html'}
 
@@ -722,9 +724,9 @@ def reset_password_page():
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     html_path = os.path.join(os.path.dirname(__file__), 'static', 'praisehub.html')
     if not os.path.exists(db_path):
-        return open(html_path).read().replace('{MESSAGE}', 'Database file not found.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Database file not found.'), 200, {'Content-Type': 'text/html'}
     if not email or not token:
-        return open(html_path).read().replace('{MESSAGE}', 'Invalid or missing reset link.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Invalid or missing reset link.'), 200, {'Content-Type': 'text/html'}
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
@@ -734,20 +736,20 @@ def reset_password_page():
     row = cursor.fetchone()
     if not row:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'Reset link not found or already used.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Reset link not found or already used.'), 200, {'Content-Type': 'text/html'}
     reset_id, db_token, created, used = row
     import datetime
     created_time = datetime.datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
     expired = (datetime.datetime.utcnow() - created_time).total_seconds() > 300
     if used == 1:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'This reset link has already been used.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'This reset link has already been used.'), 200, {'Content-Type': 'text/html'}
     if expired:
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'This reset link has expired.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'This reset link has expired.'), 200, {'Content-Type': 'text/html'}
     if not bcrypt.checkpw(token.encode('utf-8'), db_token):
         conn.close()
-        return open(html_path).read().replace('{MESSAGE}', 'Invalid reset link.'), 200, {'Content-Type': 'text/html'}
+        return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Invalid reset link.'), 200, {'Content-Type': 'text/html'}
     conn.close()
     # Valid link, show reset form (leave {MESSAGE} for JS)
     return open(html_path).read(), 200, {'Content-Type': 'text/html'}
@@ -817,6 +819,16 @@ def upload_bible():
             conn.close()
             os.remove(tmp_path)
             return jsonify(success=False, error='Missing required columns in books table'), 400
+        # Check for 66 books and update long_name if needed
+        cursor.execute("SELECT book_number FROM books ORDER BY book_number ASC")
+        book_numbers = [row[0] for row in cursor.fetchall()]
+        if len(book_numbers) == 66:
+            standard_books = [
+                "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther", "Job", "Psalms", "Proverbs", "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi", "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
+            ]
+            for book_number, book_name in zip(book_numbers, standard_books):
+                cursor.execute("UPDATE books SET long_name=? WHERE book_number=?", (book_name, book_number))
+            conn.commit()
         conn.close()
     except Exception as e:
         if os.path.exists(tmp_path):
