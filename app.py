@@ -15,8 +15,8 @@ import requests
 app = Flask(__name__)
 
 # Set the base URL for all external links
-# BASE_URL = "https://bibleapi-uswk.onrender.com"
-BASE_URL = "http://127.0.0.1:5000"  # Update this to your local or production URL as needed
+BASE_URL = "https://bibleapi-uswk.onrender.com"
+# BASE_URL = "http://127.0.0.1:5000"  # Update this to your local or production URL as needed
 
 def generate_otp(length=6):
     return random.randint(100000, 999999)
