@@ -36,6 +36,7 @@ def list_translations():
         translation_name = f.replace('.SQLite3', '')
         db_path = os.path.join(db_folder, f)
         language = None
+        abbreviation = None
         try:
             conn = sqlite3.connect(db_path)
             print(f"Successfully connected to database: {db_path}")
@@ -45,14 +46,20 @@ def list_translations():
             print(f"Row fetched from info table (language): {row}")
             if row and row[0]:
                 language = row[0]
+            cursor.execute("SELECT value FROM info WHERE name='abbreviation' LIMIT 1")
+            abbr_row = cursor.fetchone()
+            if abbr_row and abbr_row[0]:
+                abbreviation = abbr_row[0]
             conn.close()
         except Exception as e:
             print(f"Exception for {translation_name}: {e}")
             language = None
-        print(f"Translation: {translation_name}, Language: {language}")
+            abbreviation = None
+        print(f"Translation: {translation_name}, Language: {language}, Abbreviation: {abbreviation}")
         translations.append({
             "name": translation_name,
-            "language": language
+            "language": language,
+            "abbreviation": abbreviation
         })
     return Response(json.dumps({"translations": translations}, ensure_ascii=False), mimetype='application/json')
 
@@ -66,6 +73,7 @@ def load_data(translation):
         print(f"Database file not found: {db_path}")
         return jsonify(error=f"Database file not found: {db_path}"), 404
     language = None
+    abbreviation = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -73,6 +81,10 @@ def load_data(translation):
         row = cursor.fetchone()
         if row and row[0]:
             language = row[0]
+        cursor.execute("SELECT value FROM info WHERE name='abbreviation' LIMIT 1")
+        abbr_row = cursor.fetchone()
+        if abbr_row and abbr_row[0]:
+            abbreviation = abbr_row[0]
         # Query verses
         query = """
             SELECT
@@ -118,7 +130,8 @@ def load_data(translation):
             "Translation": row[0],
             "Reference": row[1],
             "Verse": verse_text.strip(),
-            "Language": language
+            "Language": language,
+            "Abbreviation": abbreviation
         })
     # Return JSON with ensure_ascii=False for Unicode
     return Response(json.dumps({"verses": cleaned_rows}, ensure_ascii=False), mimetype='application/json')
@@ -754,6 +767,103 @@ try:
         conn.close()
 except Exception as e:
     print(f"[DB MIGRATION] Could not add 'mobile' column: {e}")
+
+@app.route('/api/upload-bible', methods=['POST'])
+def upload_bible():
+    if 'file' not in request.files or 'name' not in request.form:
+        return jsonify(success=False, error='File and name are required.'), 400
+    file = request.files['file']
+    bible_name = request.form['name'].strip()
+    abbreviation = request.form.get('abbreviation', '').strip()
+    if file.filename == '' or not bible_name:
+        return jsonify(success=False, error='No selected file or name.'), 400
+    if not (file.filename.lower().endswith('.sqlite3') or file.filename.lower().endswith('.sqlite')):
+        return jsonify(success=False, error='Invalid file type'), 400
+    import re
+    import tempfile
+    forbidden = r'[\\/:*?"<>|]'
+    safe_bible_name = re.sub(forbidden, '', bible_name).strip()
+    if not safe_bible_name.lower().endswith('.sqlite3'):
+        safe_bible_name += '.SQLite3'
+    # Save to a temp file for validation
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.sqlite3') as tmp:
+        file.save(tmp.name)
+        tmp_path = tmp.name
+    # Validate tables and columns
+    try:
+        conn = sqlite3.connect(tmp_path)
+        cursor = conn.cursor()
+        # Check tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = set(row[0].lower() for row in cursor.fetchall())
+        required_tables = {'verses', 'books', 'info'}
+        if not required_tables.issubset(tables):
+            conn.close()
+            os.remove(tmp_path)
+            return jsonify(success=False, error='Missing required tables: verses, books, info'), 400
+        # Check verses columns
+        cursor.execute("PRAGMA table_info(verses)")
+        verses_cols = set(row[1].lower() for row in cursor.fetchall())
+        required_verses_cols = {'book_number', 'chapter', 'verse', 'text'}
+        if not required_verses_cols.issubset(verses_cols):
+            conn.close()
+            os.remove(tmp_path)
+            return jsonify(success=False, error='Missing required columns in verses table'), 400
+        # Check books columns
+        cursor.execute("PRAGMA table_info(books)")
+        books_cols = set(row[1].lower() for row in cursor.fetchall())
+        required_books_cols = {'book_number', 'long_name'}
+        if not required_books_cols.issubset(books_cols):
+            conn.close()
+            os.remove(tmp_path)
+            return jsonify(success=False, error='Missing required columns in books table'), 400
+        conn.close()
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        return jsonify(success=False, error=f'Invalid SQLite3 file: {e}'), 400
+    # Passed validation, save to bibles folder
+    save_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
+    os.makedirs(save_folder, exist_ok=True)
+    save_path = os.path.join(save_folder, safe_bible_name)
+    os.replace(tmp_path, save_path)
+    # Save abbreviation in info table if provided
+    if abbreviation:
+        try:
+            conn = sqlite3.connect(save_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM info WHERE name='abbreviation'")
+            exists = cursor.fetchone()[0]
+            if exists:
+                cursor.execute("UPDATE info SET value=? WHERE name='abbreviation'", (abbreviation,))
+            else:
+                cursor.execute("INSERT INTO info (name, value) VALUES (?, ?)", ('abbreviation', abbreviation))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            return jsonify(success=False, error=f'Abbreviation not saved: {e}'), 500
+    return jsonify(success=True)
+
+@app.route('/api/delete-bible', methods=['POST'])
+def delete_bible():
+    data = request.get_json()
+    bible_name = data.get('name', '').strip()
+    if not bible_name:
+        return jsonify(success=False, error='Bible name required'), 400
+    import re
+    forbidden = r'[\\/:*?"<>|]'
+    safe_bible_name = re.sub(forbidden, '', bible_name).strip()
+    if not safe_bible_name.lower().endswith('.sqlite3'):
+        safe_bible_name += '.SQLite3'
+    save_folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
+    file_path = os.path.join(save_folder, safe_bible_name)
+    if not os.path.exists(file_path):
+        return jsonify(success=False, error='Bible file not found'), 404
+    try:
+        os.remove(file_path)
+        return jsonify(success=True)
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
