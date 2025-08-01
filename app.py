@@ -877,5 +877,49 @@ def delete_bible():
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
 
+@app.route('/api/rename-bible', methods=['POST'])
+def rename_bible():
+    data = request.get_json()
+    old_name = data.get('old_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+    new_abbr = data.get('new_abbreviation', '').strip()
+    if not old_name or not new_name:
+        return jsonify(success=False, error='Both old and new Bible names are required.'), 400
+    forbidden = r'[\\/:*?"<>|]'
+    safe_old_name = re.sub(forbidden, '', old_name).strip()
+    safe_new_name = re.sub(forbidden, '', new_name).strip()
+    if not safe_old_name.lower().endswith('.sqlite3'):
+        safe_old_name += '.SQLite3'
+    if not safe_new_name.lower().endswith('.sqlite3'):
+        safe_new_name += '.SQLite3'
+    folder = os.path.join(os.path.dirname(__file__), 'db', 'bibles')
+    old_path = os.path.join(folder, safe_old_name)
+    new_path = os.path.join(folder, safe_new_name)
+    if not os.path.exists(old_path):
+        return jsonify(success=False, error='Original Bible file not found.'), 404
+    if old_path != new_path:
+        if os.path.exists(new_path):
+            return jsonify(success=False, error='A Bible with the new name already exists.'), 409
+        try:
+            os.rename(old_path, new_path)
+        except Exception as e:
+            return jsonify(success=False, error=f'Failed to rename file: {e}'), 500
+    # Update abbreviation in info table
+    if new_abbr:
+        try:
+            conn = sqlite3.connect(new_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM info WHERE name='abbreviation'")
+            exists = cursor.fetchone()[0]
+            if exists:
+                cursor.execute("UPDATE info SET value=? WHERE name='abbreviation'", (new_abbr,))
+            else:
+                cursor.execute("INSERT INTO info (name, value) VALUES (?, ?)", ('abbreviation', new_abbr))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            return jsonify(success=False, error=f'Abbreviation not updated: {e}'), 500
+    return jsonify(success=True)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

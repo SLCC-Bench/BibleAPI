@@ -90,13 +90,16 @@
                 <span id="uploadMsg" class="ml-2 text-sm"></span>
             </form>
             <!-- Bible List Table -->
+            <div class="flex flex-col gap-2 mb-2">
+                <input type="text" id="bibleSearch" placeholder="Search Bible..." class="border rounded px-2 py-1 w-full" />
+            </div>
             <div class="overflow-x-auto max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white mb-6">
                 <table class="min-w-full text-sm text-left">
                     <thead>
                         <tr class="bg-green-100 text-green-800 sticky top-0 z-10">
-                            <th class="px-3 py-2">Bible Name</th>
-                            <th class="px-3 py-2">Abbreviation</th>
-                            <th class="px-3 py-2">Language</th>
+                            <th class="px-3 py-2 cursor-pointer" id="sortBibleName">Bible Name</th>
+                            <th class="px-3 py-2 cursor-pointer" id="sortBibleAbbr">Abbreviation</th>
+                            <th class="px-3 py-2 cursor-pointer" id="sortBibleLang">Language</th>
                             <th class="px-3 py-2">Actions</th>
                         </tr>
                     </thead>
@@ -354,27 +357,64 @@
             });
         };
         // Bible List and Rename JS
+        let bibleList = [];
+        let bibleSortKey = 'name';
+        let bibleSortAsc = true;
         function fetchBibles() {
             fetch('/api/translations')
                 .then(res => res.json())
                 .then(data => {
-                    const tbody = document.getElementById('biblesTbody');
-                    tbody.innerHTML = '';
-                    (data.translations || []).forEach(bible => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td class="px-3 py-2">${bible.name}</td>
-                            <td class="px-3 py-2">${bible.abbreviation || ''}</td>
-                            <td class="px-3 py-2">${bible.language || ''}</td>
-                            <td class="px-3 py-2 flex gap-2">
-                                <button class="text-green-700 hover:underline" onclick="showRenameBible('${bible.name.replace(/'/g, "\\'")}', '${bible.abbreviation ? bible.abbreviation.replace(/'/g, "\\'") : ''}')">Edit</button>
-                                <button class="text-red-700 hover:underline" onclick="showDeleteBible('${bible.name.replace(/'/g, "\\'")}')">Delete</button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
+                    bibleList = data.translations || [];
+                    renderBibleTable();
                 });
         }
+        function renderBibleTable() {
+            const search = document.getElementById('bibleSearch').value.trim().toLowerCase();
+            let filtered = bibleList.filter(bible =>
+                bible.name.toLowerCase().includes(search) ||
+                (bible.abbreviation || '').toLowerCase().includes(search) ||
+                (bible.language || '').toLowerCase().includes(search)
+            );
+            filtered.sort((a, b) => {
+                let valA = (a[bibleSortKey] || '').toLowerCase();
+                let valB = (b[bibleSortKey] || '').toLowerCase();
+                if (valA < valB) return bibleSortAsc ? -1 : 1;
+                if (valA > valB) return bibleSortAsc ? 1 : -1;
+                return 0;
+            });
+            const tbody = document.getElementById('biblesTbody');
+            tbody.innerHTML = '';
+            filtered.forEach(bible => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-green-50 transition';
+                tr.innerHTML = `
+                    <td class="px-3 py-2">${bible.name}</td>
+                    <td class="px-3 py-2">${bible.abbreviation || ''}</td>
+                    <td class="px-3 py-2">${bible.language || ''}</td>
+                    <td class="px-3 py-2 flex gap-2">
+                        <button class="text-green-700 hover:underline" onclick="showRenameBible('${bible.name.replace(/'/g, "\\'")}', '${bible.abbreviation ? bible.abbreviation.replace(/'/g, "\\'") : ''}')">Edit</button>
+                        <button class="text-red-700 hover:underline" onclick="showDeleteBible('${bible.name.replace(/'/g, "\\'")}')">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        document.getElementById('bibleSearch').addEventListener('input', renderBibleTable);
+        document.getElementById('sortBibleName').onclick = function() {
+            bibleSortKey = 'name';
+            bibleSortAsc = bibleSortKey === 'name' ? !bibleSortAsc : true;
+            renderBibleTable();
+        };
+        document.getElementById('sortBibleAbbr').onclick = function() {
+            bibleSortKey = 'abbreviation';
+            bibleSortAsc = bibleSortKey === 'abbreviation' ? !bibleSortAsc : true;
+            renderBibleTable();
+        };
+        document.getElementById('sortBibleLang').onclick = function() {
+            bibleSortKey = 'language';
+            bibleSortAsc = bibleSortKey === 'language' ? !bibleSortAsc : true;
+            renderBibleTable();
+        };
         window.showRenameBible = function(name, abbr) {
             document.getElementById('bibleRenameForm').style.display = '';
             document.getElementById('editBibleName').value = name;
