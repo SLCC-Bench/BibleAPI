@@ -66,9 +66,10 @@ def register():
 def verify_email():
     email = request.args.get('email')
     token = request.args.get('token')
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
-    html_path = os.path.join(os.path.dirname(__file__), 'static', 'praisehub.html')
+    # Fix html_path to point to the main static folder
+    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'praisehub.html')
     if not os.path.exists(db_path):
         return open(html_path, encoding="utf-8").read().replace('{MESSAGE}', 'Database file not found.'), 200, {'Content-Type': 'text/html'}
     conn = sqlite3.connect(db_path)

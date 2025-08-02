@@ -7,7 +7,7 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(error=f"Database file not found: {db_path}"), 404
@@ -35,7 +35,7 @@ def login():
 
 @auth_bp.route('/api/verify', methods=['POST'])
 def verify_user():
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(error=f"Database file not found: {db_path}"), 404
@@ -67,7 +67,7 @@ def verify_user():
 
 @auth_bp.route('/api/profile', methods=['POST'])
 def get_profile():
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(error=f"Database file not found: {db_path}"), 404

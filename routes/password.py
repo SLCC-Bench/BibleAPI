@@ -7,11 +7,13 @@ from utils import send_password_reset_email, generate_registration_key, BASE_URL
 
 password_bp = Blueprint('password', __name__)
 
+# Ensure this route is present and matches the frontend request
 @password_bp.route('/api/request-password-reset', methods=['POST'])
 def request_password_reset():
     data = request.json
     email = data.get('email')
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    # Fix db_folder to use parent directory, not current file
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(success=False, error=f"Database file not found: {db_path}"), 404
@@ -54,7 +56,7 @@ def reset_password():
     email = data.get('email')
     token = data.get('token')
     new_password = data.get('new_password')
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(success=False, error=f"Database file not found: {db_path}"), 404
@@ -106,7 +108,7 @@ def check_reset_token():
     data = request.json
     email = data.get('email')
     token = data.get('token')
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(success=False, error="Database file not found"), 404
@@ -141,7 +143,7 @@ def check_reset_token():
 def reset_password_page():
     email = request.args.get('email')
     token = request.args.get('token')
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     html_path = os.path.join(os.path.dirname(__file__), 'static', 'praisehub.html')
     if not os.path.exists(db_path):
