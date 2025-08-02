@@ -86,6 +86,10 @@
                     <label class="font-semibold text-green-700">Upload Bible DB:</label>
                     <input type="file" id="bibleFile" accept=".sqlite3,.SQLite3" class="border rounded px-2 py-1" required>
                 </div>
+                <div class="flex flex-col gap-2">
+                    <label class="font-semibold text-green-700">Year:</label>
+                    <input type="text" id="bibleYear" placeholder="e.g. 1901" class="border rounded px-2 py-1">
+                </div>
                 <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 transition font-semibold">Upload</button>
                 <span id="uploadMsg" class="ml-2 text-sm"></span>
             </form>
@@ -100,6 +104,7 @@
                             <th class="px-3 py-2 cursor-pointer" id="sortBibleName">Bible Name</th>
                             <th class="px-3 py-2 cursor-pointer" id="sortBibleAbbr">Abbreviation</th>
                             <th class="px-3 py-2 cursor-pointer" id="sortBibleLang">Language</th>
+                            <th class="px-3 py-2 cursor-pointer" id="sortBibleYear">Year</th>
                             <th class="px-3 py-2">Actions</th>
                         </tr>
                     </thead>
@@ -120,10 +125,14 @@
             </div>
             <!-- Bible Rename Form -->
             <form id="bibleRenameForm" class="flex flex-col gap-2 mb-4 bg-green-50 p-4 rounded-lg shadow" style="display:none;">
-                <label class="font-semibold text-green-700">Edit Bible Name:</label>
+                <label class="font-semibold text-green-700">Bible Name:</label>
                 <input type="text" id="editBibleName" class="border rounded px-2 py-1" required>
-                <label class="font-semibold text-green-700">Edit Abbreviation:</label>
+                <label class="font-semibold text-green-700">Abbreviation:</label>
                 <input type="text" id="editBibleAbbr" class="border rounded px-2 py-1">
+                <label class="font-semibold text-green-700">Year:</label>
+                <input type="text" id="editBibleYear" class="border rounded px-2 py-1">
+                <label class="font-semibold text-green-700">Update Bible DB (optional):</label>
+                <input type="file" id="editBibleFile" accept=".sqlite3,.SQLite3" class="border rounded px-2 py-1">
                 <input type="hidden" id="editBibleOldName">
                 <div class="flex gap-2">
                     <button type="submit" class="bg-green-600 text-white px-4 py-1 rounded shadow hover:bg-green-700 transition font-semibold">Save</button>
@@ -328,6 +337,7 @@
             const file = bibleFile.files[0];
             const name = bibleName.value.trim();
             const abbr = document.getElementById('bibleAbbr').value.trim();
+            const year = document.getElementById('bibleYear').value.trim();
             if (!file || !name) {
                 showToast('Please provide a Bible name and select a file.', 'error');
                 return;
@@ -336,6 +346,7 @@
             formData.append('file', file);
             formData.append('name', name);
             formData.append('abbreviation', abbr);
+            formData.append('year', year);
             fetch('/api/upload-bible', {
                 method: 'POST',
                 body: formData
@@ -347,6 +358,7 @@
                     bibleFile.value = '';
                     bibleName.value = '';
                     document.getElementById('bibleAbbr').value = '';
+                    document.getElementById('bibleYear').value = '';
                     fetchBibles();
                 } else {
                     showToast(result.error || 'Upload failed.', 'error');
@@ -373,7 +385,8 @@
             let filtered = bibleList.filter(bible =>
                 bible.name.toLowerCase().includes(search) ||
                 (bible.abbreviation || '').toLowerCase().includes(search) ||
-                (bible.language || '').toLowerCase().includes(search)
+                (bible.language || '').toLowerCase().includes(search) ||
+                (bible.year || '').toLowerCase().includes(search)
             );
             filtered.sort((a, b) => {
                 let valA = (a[bibleSortKey] || '').toLowerCase();
@@ -391,6 +404,7 @@
                     <td class="px-3 py-2">${bible.name}</td>
                     <td class="px-3 py-2">${bible.abbreviation || ''}</td>
                     <td class="px-3 py-2">${bible.language || ''}</td>
+                    <td class="px-3 py-2">${bible.year || ''}</td>
                     <td class="px-3 py-2 flex gap-2">
                         <button class="text-green-700 hover:underline" onclick="showRenameBible('${bible.name.replace(/'/g, "\\'")}', '${bible.abbreviation ? bible.abbreviation.replace(/'/g, "\\'") : ''}')">Edit</button>
                         <button class="text-red-700 hover:underline" onclick="showDeleteBible('${bible.name.replace(/'/g, "\\'")}')">Delete</button>
@@ -415,11 +429,19 @@
             bibleSortAsc = bibleSortKey === 'language' ? !bibleSortAsc : true;
             renderBibleTable();
         };
+        document.getElementById('sortBibleYear').onclick = function() {
+            bibleSortKey = 'year';
+            bibleSortAsc = bibleSortKey === 'year' ? !bibleSortAsc : true;
+            renderBibleTable();
+        };
         window.showRenameBible = function(name, abbr) {
+            const bible = bibleList.find(b => b.name === name);
             document.getElementById('bibleRenameForm').style.display = '';
             document.getElementById('editBibleName').value = name;
             document.getElementById('editBibleOldName').value = name;
             document.getElementById('editBibleAbbr').value = abbr || '';
+            document.getElementById('editBibleYear').value = bible && bible.year ? bible.year : '';
+            document.getElementById('editBibleFile').value = '';
             document.getElementById('renameMsg').textContent = '';
         };
         window.showDeleteBible = function(name) {
@@ -464,27 +486,35 @@
             const oldName = document.getElementById('editBibleOldName').value;
             const newName = document.getElementById('editBibleName').value.trim();
             const newAbbr = document.getElementById('editBibleAbbr').value.trim();
+            const newYear = document.getElementById('editBibleYear').value.trim();
+            const fileInput = document.getElementById('editBibleFile');
+            const file = fileInput.files[0];
             if (!newName) {
                 showToast('Bible name cannot be empty.', 'error');
                 return;
             }
-            fetch('/api/rename-bible', {
+            const formData = new FormData();
+            formData.append('old_name', oldName);
+            formData.append('new_name', newName);
+            formData.append('new_abbreviation', newAbbr);
+            formData.append('new_year', newYear);
+            if (file) formData.append('file', file);
+            fetch('/api/update-bible', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ old_name: oldName, new_name: newName, new_abbreviation: newAbbr })
+                body: formData
             })
             .then(res => res.json())
             .then(result => {
                 if (result.success) {
-                    showToast('Bible name updated!', 'success');
+                    showToast('Bible updated!', 'success');
                     document.getElementById('bibleRenameForm').style.display = 'none';
                     fetchBibles();
                 } else {
-                    showToast(result.error || 'Rename failed.', 'error');
+                    showToast(result.error || 'Update failed.', 'error');
                 }
             })
             .catch(() => {
-                showToast('Rename failed.', 'error');
+                showToast('Update failed.', 'error');
             });
         };
         fetchUsers();

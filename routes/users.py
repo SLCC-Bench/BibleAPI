@@ -1,3 +1,5 @@
+print("users.py loaded")  # Debug print
+
 from flask import Blueprint, request, jsonify
 import os
 import sqlite3
@@ -7,7 +9,9 @@ users_bp = Blueprint('users', __name__)
 
 @users_bp.route('/api/users', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def crud_users():
-    db_folder = os.path.join(os.path.dirname(__file__), 'db')
+    print("crud_users route called")  # Debug print
+    # Fix db_folder to point to the correct db directory
+    db_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db')
     db_path = os.path.join(db_folder, 'Praisehub.SQLite3')
     if not os.path.exists(db_path):
         return jsonify(error=f"Database file not found: {db_path}"), 404
