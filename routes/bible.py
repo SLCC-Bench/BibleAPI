@@ -225,11 +225,15 @@ def upload_bible():
         # Get info before validation so it's always defined
         src_cursor.execute("SELECT name, value FROM info")
         info_data = src_cursor.fetchall()
-        # Check if the number of books and their order is correct
-        if len(book_names) != 66 or book_names != expected_books:
+        # If 66 books but not Genesis to Revelation, forcibly set correct names
+        if len(book_names) == 66 and book_names != expected_books:
+            books_data_sorted = [(i+1, expected_books[i]) for i in range(66)]
+            book_names = expected_books.copy()
+        # If not 66 books, reject
+        if len(book_names) != 66:
             src_conn.close()
             os.remove(tmp_path)
-            return jsonify(success=False, error='Uploaded Bible must have exactly 66 books from Genesis to Revelation in correct order.'), 400
+            return jsonify(success=False, error='Uploaded Bible must have exactly 66 books from Genesis to Revelation.'), 400
         src_conn.close()
         os.remove(tmp_path)
     except Exception as e:
@@ -324,14 +328,9 @@ def upload_bible():
             bible_cursor.execute("INSERT INTO info (translation_id, name, value) VALUES (?, 'year', ?)", (translation_id, src_year))
     # Insert books
     bible_cursor.execute("DELETE FROM books WHERE translation_id=?", (translation_id,))
-    # Only insert books if not already present and matches expected
-    bible_cursor.execute("SELECT book_number, long_name FROM books WHERE translation_id=?", (translation_id,))
-    existing_books = bible_cursor.fetchall()
-    existing_books_sorted = sorted(existing_books, key=lambda x: x[0])
-    existing_book_names = [b[1].strip() for b in existing_books_sorted]
-    if existing_book_names != expected_books:
-        for book_number, long_name in books_data_sorted:
-            bible_cursor.execute("INSERT INTO books (translation_id, book_number, long_name) VALUES (?, ?, ?)", (translation_id, book_number, long_name))
+    # Always insert Genesis to Revelation sequence
+    for book_number, long_name in books_data_sorted:
+        bible_cursor.execute("INSERT INTO books (translation_id, book_number, long_name) VALUES (?, ?, ?)", (translation_id, book_number, long_name))
     # Insert verses
     bible_cursor.execute("DELETE FROM verses WHERE translation_id=?", (translation_id,))
     for book_number, chapter, verse, text in verses_data:
