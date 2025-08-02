@@ -3,8 +3,8 @@ import random
 import string
 import os
 
-# BASE_URL = "https://bibleapi-uswk.onrender.com"
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = "https://bibleapi-uswk.onrender.com"
+# BASE_URL = "http://127.0.0.1:5000"
 
 def generate_registration_key(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
