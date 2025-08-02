@@ -16,4 +16,5 @@ app.register_blueprint(password_bp)
 
 if __name__ == "__main__":
     print("Registered routes:", app.url_map)  # Debug print
-    app.run(port=5000, debug=True)
+    # Use 0.0.0.0 for host so it works on Render.com
+    app.run(host="0.0.0.0", port=5000, debug=True)
