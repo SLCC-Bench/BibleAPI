@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, send_file
 import os
 import sqlite3
 import json
@@ -477,4 +477,11 @@ def delete_bible():
         return jsonify(success=False, error=f'Database error: {e}'), 500
     conn.close()
     return jsonify(success=True)
+
+@bible_bp.route('/static/db/bible.sqlite3', methods=['GET'])
+def download_bible_db():
+    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.sqlite3')
+    if not os.path.exists(bible_db_path):
+        return jsonify(error="Bible database not found."), 404
+    return send_file(bible_db_path, as_attachment=True, download_name='bible.sqlite3')
 ensure_bible_db()
