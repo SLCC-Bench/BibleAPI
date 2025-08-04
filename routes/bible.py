@@ -478,10 +478,10 @@ def delete_bible():
     conn.close()
     return jsonify(success=True)
 
-@bible_bp.route('/static/db/bible.sqlite3', methods=['GET'])
+@bible_bp.route('/static/db/bible.SQLite3', methods=['GET'])
 def download_bible_db():
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.sqlite3')
+    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
     if not os.path.exists(bible_db_path):
         return jsonify(error="Bible database not found."), 404
-    return send_file(bible_db_path, as_attachment=True, download_name='bible.sqlite3')
+    return send_file(bible_db_path, as_attachment=True, download_name='bible.SQLite3')
 ensure_bible_db()
