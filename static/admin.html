@@ -7,6 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
+    <!-- Loading Spinner Overlay -->
+    <div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;background:rgba(255,255,255,0.7);align-items:center;justify-content:center;" class="flex">
+        <div class="flex flex-col items-center">
+            <svg class="animate-spin h-12 w-12 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            <span class="text-blue-700 font-semibold text-lg">Loading...</span>
+        </div>
+    </div>
     <div class="flex-1 flex flex-col items-center justify-center">
         <!-- Top Navigation (Tabs) -->
         <div class="fixed top-0 left-0 w-full flex justify-center bg-white shadow z-10">
@@ -201,8 +211,16 @@
                 }, duration);
             }
         }
+        // Spinner helpers
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
         // User CRUD JS
         function fetchUsers() {
+            showLoading();
             fetch('/api/users')
                 .then(res => res.json())
                 .then(data => {
@@ -228,9 +246,16 @@
                         `;
                         tbody.appendChild(tr);
                     });
+                })
+                .catch(() => {
+                    hideLoading();
+                })
+                .finally(() => {
+                    hideLoading();
                 });
         }
         function editUser(id) {
+            showLoading();
             fetch('/api/users')
                 .then(res => res.json())
                 .then(data => {
@@ -246,11 +271,18 @@
                     document.getElementById('isEmailVerified').checked = !!user.isEmailVerified;
                     document.getElementById('isRegistered').checked = !!user.isRegistered;
                     document.getElementById('password').value = '';
+                })
+                .catch(() => {
+                    hideLoading();
+                })
+                .finally(() => {
+                    hideLoading();
                 });
         }
         window.editUser = editUser;
         document.getElementById('userForm').onsubmit = function(e) {
             e.preventDefault();
+            showLoading();
             const id = document.getElementById('userId').value;
             const firstname = document.getElementById('firstname').value;
             const lastname = document.getElementById('lastname').value;
@@ -279,14 +311,23 @@
                     showToast(result.error || 'Operation failed.', 'error');
                 }
                 fetchUsers();
+            })
+            .catch(() => {
+                hideLoading();
+            })
+            .finally(() => {
+                hideLoading();
             });
         };
         document.getElementById('resetBtn').onclick = function() {
+            showLoading();
             document.getElementById('userForm').reset();
             document.getElementById('userId').value = '';
             showToast('Form reset.', 'info');
+            hideLoading();
         };
         function showDeleteUser(id) {
+            showLoading();
             fetch('/api/users')
                 .then(res => res.json())
                 .then(data => {
@@ -296,6 +337,12 @@
                     document.getElementById('deleteUserName').textContent = user.username || user.email || user.id;
                     document.getElementById('confirmDeleteUser').setAttribute('data-user', id);
                     document.getElementById('deleteUserMsg').textContent = '';
+                })
+                .catch(() => {
+                    hideLoading();
+                })
+                .finally(() => {
+                    hideLoading();
                 });
         }
         window.showDeleteUser = showDeleteUser;
@@ -304,6 +351,7 @@
             document.getElementById('deleteUserMsg').textContent = '';
         };
         document.getElementById('confirmDeleteUser').onclick = function() {
+            showLoading();
             const id = this.getAttribute('data-user');
             fetch('/api/users', {
                 method: 'DELETE',
@@ -323,7 +371,10 @@
                 }
             })
             .catch(() => {
-                showToast('Delete failed.', 'error');
+                hideLoading();
+            })
+            .finally(() => {
+                hideLoading();
             });
         };
         // Bible DB Upload JS
@@ -333,6 +384,7 @@
         const uploadMsg = document.getElementById('uploadMsg');
         bibleUploadForm.onsubmit = function(e) {
             e.preventDefault();
+            showLoading();
             uploadMsg.textContent = '';
             const file = bibleFile.files[0];
             const name = bibleName.value.trim();
@@ -340,6 +392,7 @@
             const year = document.getElementById('bibleYear').value.trim();
             if (!file || !name) {
                 showToast('Please provide a Bible name and select a file.', 'error');
+                hideLoading();
                 return;
             }
             const formData = new FormData();
@@ -351,21 +404,31 @@
                 method: 'POST',
                 body: formData
             })
-            .then(res => res.json())
+            .then(res => {
+                hideLoading();
+                if (!res.ok) {
+                    showToast('Server error: ' + res.status, 'error');
+                    return Promise.reject();
+                }
+                return res.json();
+            })
             .then(result => {
-                if (result.success) {
+                if (result && result.success) {
                     showToast('Upload successful!', 'success');
                     bibleFile.value = '';
                     bibleName.value = '';
                     document.getElementById('bibleAbbr').value = '';
                     document.getElementById('bibleYear').value = '';
-                    fetchBibles();
-                } else {
+                    setTimeout(fetchBibles, 300); // Delay to allow spinner to hide
+                } else if (result) {
                     showToast(result.error || 'Upload failed.', 'error');
                 }
             })
             .catch(() => {
-                showToast('Upload failed.', 'error');
+                hideLoading();
+            })
+            .finally(() => {
+                // hideLoading(); // Already called above
             });
         };
         // Bible List and Rename JS
@@ -373,11 +436,18 @@
         let bibleSortKey = 'name';
         let bibleSortAsc = true;
         function fetchBibles() {
+            showLoading();
             fetch('/api/translations')
                 .then(res => res.json())
                 .then(data => {
                     bibleList = data.translations || [];
                     renderBibleTable();
+                })
+                .catch(() => {
+                    hideLoading();
+                })
+                .finally(() => {
+                    hideLoading();
                 });
         }
         function renderBibleTable() {
@@ -474,7 +544,10 @@
                 }
             })
             .catch(() => {
-                showToast('Delete failed.', 'error');
+                hideLoading();
+            })
+            .finally(() => {
+                hideLoading();
             });
         };
         document.getElementById('cancelEditBible').onclick = function() {
@@ -483,6 +556,7 @@
         };
         document.getElementById('bibleRenameForm').onsubmit = function(e) {
             e.preventDefault();
+            showLoading();
             const oldName = document.getElementById('editBibleOldName').value;
             const newName = document.getElementById('editBibleName').value.trim();
             const newAbbr = document.getElementById('editBibleAbbr').value.trim();
@@ -491,6 +565,7 @@
             const file = fileInput.files[0];
             if (!newName) {
                 showToast('Bible name cannot be empty.', 'error');
+                hideLoading();
                 return;
             }
             const formData = new FormData();
@@ -514,7 +589,10 @@
                 }
             })
             .catch(() => {
-                showToast('Update failed.', 'error');
+                hideLoading();
+            })
+            .finally(() => {
+                hideLoading();
             });
         };
         fetchUsers();
