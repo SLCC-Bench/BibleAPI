@@ -104,7 +104,7 @@ def send_professional_email(to_email, subject, heading, message, action_text, ac
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
     SMTP_USERNAME = 'bengie.dulay@gmail.com'
-    SMTP_PASSWORD = 'mggv tlgu wxad munf'
+    SMTP_PASSWORD = '[REDACTED]'
     msg = EmailMessage()
     msg['Subject'] = subject
     msg['From'] = SMTP_USERNAME

@@ -107,6 +107,9 @@
             <div class="flex flex-col gap-2 mb-2">
                 <input type="text" id="bibleSearch" placeholder="Search Bible..." class="border rounded px-2 py-1 w-full" />
             </div>
+            <div class="flex gap-2 mb-4">
+                <button class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 transition font-semibold" onclick="downloadAllBibles()">📥 Download All Bibles</button>
+            </div>
             <div class="overflow-x-auto max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white mb-6">
                 <table class="min-w-full text-sm text-left">
                     <thead>
@@ -519,6 +522,62 @@
             document.getElementById('deleteBibleName').textContent = name;
             document.getElementById('confirmDeleteBible').setAttribute('data-bible', name);
             document.getElementById('deleteBibleMsg').textContent = '';
+        };
+        window.downloadBible = function(name) {
+            showLoading();
+            fetch('/api/download/bible/zip')
+                .then(res => {
+                    if (!res.ok) {
+                        showToast('Download failed: ' + res.status, 'error');
+                        hideLoading();
+                        return Promise.reject();
+                    }
+                    return res.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'bible_all.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('Download started!', 'success');
+                    hideLoading();
+                })
+                .catch(() => {
+                    hideLoading();
+                    showToast('Download error.', 'error');
+                });
+        };
+        window.downloadAllBibles = function() {
+            showLoading();
+            fetch('/api/download/bible/zip')
+                .then(res => {
+                    if (!res.ok) {
+                        showToast('Download failed: ' + res.status, 'error');
+                        hideLoading();
+                        return Promise.reject();
+                    }
+                    return res.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'bible_all.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showToast('All Bibles downloaded!', 'success');
+                    hideLoading();
+                })
+                .catch(() => {
+                    hideLoading();
+                    showToast('Download error.', 'error');
+                });
         };
         document.getElementById('cancelDeleteBible').onclick = function() {
             document.getElementById('deleteBibleModal').style.display = 'none';

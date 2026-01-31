@@ -5,6 +5,7 @@ import json
 import re
 import tempfile
 import threading
+import zipfile
 
 # Standard 66 book names
 STANDARD_BOOKS = [
@@ -218,4 +219,26 @@ def download_bible_db():
     if not os.path.exists(bible_db_path):
         return jsonify(error="Bible database not found."), 404
     return send_file(bible_db_path, as_attachment=True, download_name='bible.SQLite3')
+
+@bible_bp.route('/api/download/bible/zip', methods=['GET'])
+def download_bible_zip():
+    ensure_bible_db()
+    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
+    if not os.path.exists(bible_db_path):
+        return jsonify(error="Bible database not found."), 404
+    
+    # Create a temporary zip file
+    with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_zip:
+        tmp_zip_path = tmp_zip.name
+    
+    try:
+        with zipfile.ZipFile(tmp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(bible_db_path, arcname='bible.SQLite3')
+        
+        return send_file(tmp_zip_path, as_attachment=True, download_name='bible_all.zip', mimetype='application/zip')
+    except Exception as e:
+        if os.path.exists(tmp_zip_path):
+            os.remove(tmp_zip_path)
+        return jsonify(error=f"Error creating zip file: {str(e)}"), 500
+
 ensure_bible_db()
