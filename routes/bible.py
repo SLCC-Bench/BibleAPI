@@ -27,98 +27,6 @@ STANDARD_BOOKS = [
 
 bible_bp = Blueprint('bible', __name__)
 
-def ensure_bible_db():
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
-    db_folder = os.path.dirname(bible_db_path)
-    if not os.path.exists(db_folder):
-        os.makedirs(db_folder)
-    if not os.path.exists(bible_db_path):
-        conn = sqlite3.connect(bible_db_path)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS translations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                language TEXT,
-                abbreviation TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS books (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                translation_id INTEGER,
-                book_number INTEGER,
-                long_name TEXT,
-                FOREIGN KEY (translation_id) REFERENCES translations(id)
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS verses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                translation_id INTEGER,
-                book_number INTEGER,
-                chapter INTEGER,
-                verse INTEGER,
-                text TEXT,
-                FOREIGN KEY (translation_id) REFERENCES translations(id)
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS info (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                translation_id INTEGER,
-                name TEXT,
-                value TEXT,
-                FOREIGN KEY (translation_id) REFERENCES translations(id)
-            )
-        """)
-        conn.commit()
-        # Remove year column if exists
-        cursor.execute("PRAGMA table_info(info)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'year' in columns:
-            # SQLite does not support DROP COLUMN directly, so recreate table
-            cursor.execute("ALTER TABLE info RENAME TO info_old")
-            cursor.execute("""
-                CREATE TABLE info (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    translation_id INTEGER,
-                    name TEXT,
-                    value TEXT,
-                    FOREIGN KEY (translation_id) REFERENCES translations(id)
-                )
-            """)
-            cursor.execute("""
-                INSERT INTO info (id, translation_id, name, value)
-                SELECT id, translation_id, name, value FROM info_old
-            """)
-            cursor.execute("DROP TABLE info_old")
-        conn.commit()
-        conn.close()
-    else:
-        # Remove UNIQUE constraint from 'name' if present (robust check)
-        conn = sqlite3.connect(bible_db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='translations'")
-        table_sql = cursor.fetchone()
-        if table_sql and "UNIQUE" in table_sql[0]:
-            cursor.execute("ALTER TABLE translations RENAME TO translations_old")
-            cursor.execute("""
-                CREATE TABLE translations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    language TEXT,
-                    abbreviation TEXT
-                )
-            """)
-            cursor.execute("""
-                INSERT INTO translations (id, name, language, abbreviation)
-                SELECT id, name, language, abbreviation FROM translations_old
-            """)
-            cursor.execute("DROP TABLE translations_old")
-            conn.commit()
-        conn.close()
-
 @bible_bp.route('/api/translations')
 def list_translations():
     bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
@@ -212,30 +120,8 @@ def load_data(translation):
 
 @bible_bp.route('/static/db/bible.SQLite3', methods=['GET'])
 def download_bible_db():
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
-    if not os.path.exists(bible_db_path):
-        return jsonify(error="Bible database not found."), 404
-    return send_file(bible_db_path, as_attachment=True, download_name='bible.SQLite3')
+    return jsonify(error="Bible database not found."), 404
 
 @bible_bp.route('/api/download/bible/zip', methods=['GET'])
 def download_bible_zip():
-    ensure_bible_db()
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
-    if not os.path.exists(bible_db_path):
-        return jsonify(error="Bible database not found."), 404
-    
-    # Create a temporary zip file
-    with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_zip:
-        tmp_zip_path = tmp_zip.name
-    
-    try:
-        with zipfile.ZipFile(tmp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(bible_db_path, arcname='bible.SQLite3')
-        
-        return send_file(tmp_zip_path, as_attachment=True, download_name='bible_all.zip', mimetype='application/zip')
-    except Exception as e:
-        if os.path.exists(tmp_zip_path):
-            os.remove(tmp_zip_path)
-        return jsonify(error=f"Error creating zip file: {str(e)}"), 500
-
-ensure_bible_db()
+    return jsonify(error="Bible database not found."), 404

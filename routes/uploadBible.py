@@ -5,7 +5,7 @@ import re
 import tempfile
 import json
 
-from routes.bible import STANDARD_BOOKS, ensure_bible_db
+from routes.bible import STANDARD_BOOKS
 
 upload_bible_bp = Blueprint('upload_bible', __name__)
 
@@ -15,8 +15,6 @@ def sanitize_filename(name):
 
 @upload_bible_bp.route('/api/upload-bible', methods=['POST'])
 def upload_bible():
-    ensure_bible_db()
-
     if 'file' not in request.files or 'name' not in request.form:
         return jsonify(success=False, error='File and name are required.'), 400
 

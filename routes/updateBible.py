@@ -62,3 +62,22 @@ def update_bible():
         return jsonify(success=True, message=f"Bible '{old_name}' updated to '{new_name}'.", filename=new_filename)
     except Exception as e:
         return jsonify(success=False, error=f"Error updating Bible JSON: {e}"), 400
+
+@update_bible_bp.route('/api/delete-bible', methods=['POST'])
+def delete_bible():
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify(success=False, error='Bible name is required.'), 400
+
+    try:
+        bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
+        filename = sanitize_filename(name) + ".json"
+        json_path = os.path.join(bible_folder, filename)
+        if os.path.exists(json_path):
+            os.remove(json_path)
+            return jsonify(success=True, message=f"Bible '{name}' deleted.")
+        else:
+            return jsonify(success=False, error=f"Bible '{name}' not found."), 404
+    except Exception as e:
+        return jsonify(success=False, error=f"Error deleting Bible: {e}"), 400
