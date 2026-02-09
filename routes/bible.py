@@ -121,60 +121,57 @@ def ensure_bible_db():
 
 @bible_bp.route('/api/translations')
 def list_translations():
-    ensure_bible_db()
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
+    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
     translations = []
-    if os.path.exists(bible_db_path):
-        conn = sqlite3.connect(bible_db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, language, abbreviation FROM translations")
-        for row in cursor.fetchall():
-            translation_id, name, language, abbreviation = row
-            # Get year from info table (value where name='year')
-            cursor.execute("SELECT value FROM info WHERE translation_id=? AND name='year' LIMIT 1", (translation_id,))
-            year_row = cursor.fetchone()
-            year = year_row[0] if year_row and year_row[0] else ''
-            translations.append({
-                "name": name,
-                "language": language,
-                "abbreviation": abbreviation,
-                "year": year,
-                "filename": None  # No filename, since all are merged into bible.SQLite3
-            })
-        conn.close()
+    if os.path.exists(bible_folder):
+        for fname in os.listdir(bible_folder):
+            if fname.lower().endswith('.json'):
+                fpath = os.path.join(bible_folder, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        t = data.get("translation", {})
+                        translations.append({
+                            "name": t.get("name", ""),
+                            "language": t.get("language", ""),
+                            "abbreviation": t.get("abbreviation", ""),
+                            "year": t.get("year", ""),
+                            "filename": fname
+                        })
+                except Exception:
+                    continue
     return Response(json.dumps({"translations": translations}, ensure_ascii=False), mimetype='application/json')
 
 @bible_bp.route('/api/verses/<translation>')
 def load_data(translation):
-    ensure_bible_db()
-    bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
-    conn = sqlite3.connect(bible_db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, language, abbreviation FROM translations WHERE name=?", (translation,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
+    # Load from JSON file in bible folder
+    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
+    # Try to find the file by matching translation name (case-insensitive, spaces allowed)
+    json_file = None
+    for fname in os.listdir(bible_folder):
+        if fname.lower().endswith('.json'):
+            try:
+                with open(os.path.join(bible_folder, fname), 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    t = data.get("translation", {})
+                    if t.get("name", "").lower() == translation.lower():
+                        json_file = os.path.join(bible_folder, fname)
+                        break
+            except Exception:
+                continue
+
+    if not json_file:
         return jsonify(error=f"Translation '{translation}' not found."), 404
-    translation_id, name, language, abbreviation = row
-    # Get year from info table
-    cursor.execute("SELECT value FROM info WHERE translation_id=? AND name='year' LIMIT 1", (translation_id,))
-    year_row = cursor.fetchone()
-    year = year_row[0] if year_row and year_row[0] else ''
-    query = """
-        SELECT
-            ? AS Translation,
-            books.long_name || ' ' || verses.chapter || ':' || verses.verse AS Reference,
-            verses.text AS Verse
-        FROM verses
-        JOIN books ON verses.translation_id = books.translation_id AND verses.book_number = books.book_number
-        WHERE verses.translation_id=?
-        ORDER BY verses.book_number, CAST(verses.chapter AS INTEGER), CAST(verses.verse AS INTEGER)
-    """
-    cursor.execute(query, (translation, translation_id))
-    rows = cursor.fetchall()
+
+    with open(json_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        translation_info = data.get("translation", {})
+        verses = data.get("verses", [])
+
+    # Clean up verse text as in the original code
     cleaned_rows = []
-    for row in rows:
-        verse_text = row[2] or ''
+    for v in verses:
+        verse_text = v.get("Verse", "")
         # Remove <S> tags with Strong's numbers
         verse_text = re.sub(r'<S>[\d\s,]+<\/S>', '', verse_text)
         # Remove <n>...</n> tags and their contents
@@ -198,17 +195,17 @@ def load_data(translation):
         # Collapse excess whitespace
         verse_text = re.sub(r'\s{2,}', ' ', verse_text)
         cleaned_rows.append({
-            "Translation": row[0],
-            "Reference": row[1],
+            "Translation": v.get("Translation", ""),
+            "Reference": v.get("Reference", ""),
             "Verse": verse_text.strip()
         })
-    conn.close()
+
     return Response(json.dumps({
         "translation": {
-            "name": name,
-            "language": language,
-            "abbreviation": abbreviation,
-            "year": year
+            "name": translation_info.get("name", ""),
+            "language": translation_info.get("language", ""),
+            "abbreviation": translation_info.get("abbreviation", ""),
+            "year": translation_info.get("year", "")
         },
         "verses": cleaned_rows
     }, ensure_ascii=False), mimetype='application/json')
