@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from routes.users import users_bp
 from routes.auth import auth_bp
 from routes.bible import bible_bp
@@ -21,9 +21,9 @@ app.register_blueprint(upload_bible_bp)
 app.register_blueprint(update_bible_bp)
 app.register_blueprint(webhook_bp)
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def index():
-    return "Praisehub API is running."
+    return send_from_directory(app.static_folder, "praisehub.html")
 
 @app.route("/healthz", methods=["GET"])
 def healthz():

@@ -4,170 +4,352 @@
     <meta charset="UTF-8">
     <title>Praisehub</title>
     <link rel="icon" type="image/x-icon" href="/static/icon.ico">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="w-full max-w-md mx-auto bg-white rounded-xl shadow-lg p-8 mt-10">
-        <div class="flex flex-col items-center mb-6">
-            <img src="/static/icon.ico" alt="SLCC Bible API" class="w-16 h-16 mb-2">
-            <h2 class="text-2xl font-bold text-gray-800 mb-2" id="mainTitle">Message</h2>
-        </div>
-        <div id="mainMessage" class="text-center text-lg text-gray-700 mb-4">{MESSAGE}</div>
-        <button id="goToEmailBtn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition duration-150 mb-2">Go to your Email</button>
-        <form id="resetForm" class="space-y-4" style="display:none;">
-            <input type="password" id="newPassword" placeholder="New Password" required minlength="6" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <input type="password" id="confirmPassword" placeholder="Confirm Password" required minlength="6" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <div id="passwordRequirements" class="text-sm mt-2 mb-2" style="display:none;">
-                <ul class="list-disc pl-5" id="requirementsList">
-                    <li id="req-length" class="font-bold text-red-600">At least 8 characters</li>
-                    <li id="req-uppercase" class="font-bold text-red-600">At least 1 uppercase letter</li>
-                    <li id="req-number" class="font-bold text-red-600">At least 1 number</li>
-                    <li id="req-special" class="font-bold text-red-600">At least 1 special character</li>
-                </ul>
-            </div>
-            <input type="submit" value="Change Password" class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition duration-150">
-        </form>
-        <div class="msg text-center mt-4 min-h-[24px] text-red-600 font-medium" id="msg"></div>
-    </div>
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        const email = params.get('email');
-        const token = params.get('token');
-        const form = document.getElementById('resetForm');
-        const msg = document.getElementById('msg');
-        const mainMessage = document.getElementById('mainMessage');
-        const goToEmailBtn = document.getElementById('goToEmailBtn');
-        const mainTitle = document.getElementById('mainTitle');
-
-        const messageText = mainMessage.textContent.trim().toLowerCase();
-
-        if (messageText.includes('verified')) {
-            // Email verification success or already verified
-            form.style.display = 'none';
-            goToEmailBtn.style.display = '';
-            mainTitle.textContent = 'Verification';
-        } else if (messageText.includes('already verified')) {
-            // Email already verified
-            form.style.display = 'none';
-            goToEmailBtn.style.display = '';
-            mainTitle.textContent = 'Verification';
-        } else if (messageText.includes('reset') || (email && token && (!mainMessage.textContent || mainMessage.textContent === '{MESSAGE}'))) {
-            // Password reset mode
-            form.style.display = '';
-            goToEmailBtn.style.display = 'none';
-            mainTitle.textContent = 'Reset Password';
-            if (!messageText.includes('reset')) mainMessage.textContent = '';
-            // Check token validity on load
-            async function checkToken() {
-                if (!email || !token) {
-                    msg.textContent = "Invalid reset link.";
-                    form.style.display = 'none';
-                    return;
-                }
-                const response = await fetch('/api/check-reset-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, token })
-                });
-                const result = await response.json();
-                if (!result.success) {
-                    if (!mainMessage.textContent || mainMessage.textContent === '{MESSAGE}') {
-                        mainMessage.textContent = '';
-                        if (result.expired) {
-                            msg.textContent = "This reset link has expired. Please request a new password reset.";
-                        } else if (result.used) {
-                            msg.textContent = "This reset link has already been used. Please request a new password reset if needed.";
-                        } else if (result.invalid) {
-                            msg.textContent = "Invalid reset link. Please check your email or request a new reset.";
-                        } else {
-                            msg.textContent = result.error || "Invalid or expired reset link.";
-                        }
-                    }
-                    form.style.display = 'none';
-                }
-            }
-            if (!messageText.includes('reset')) checkToken();
-            const passwordRequirements = [
-                { regex: /.{8,}/, message: "At least 8 characters", id: "req-length" },
-                { regex: /[A-Z]/, message: "At least 1 uppercase letter", id: "req-uppercase" },
-                { regex: /[0-9]/, message: "At least 1 number", id: "req-number" },
-                { regex: /[^A-Za-z0-9]/, message: "At least 1 special character", id: "req-special" }
-            ];
-            const newPasswordInput = document.getElementById('newPassword');
-            function updateRequirementsDisplay() {
-                const value = newPasswordInput.value;
-                const reqDiv = document.getElementById('passwordRequirements');
-                if (!value) {
-                    reqDiv.style.display = 'none';
-                    return;
-                } else {
-                    reqDiv.style.display = '';
-                }
-                for (const req of passwordRequirements) {
-                    const el = document.getElementById(req.id);
-                    if (req.regex.test(value)) {
-                        el.classList.remove('text-red-600');
-                        el.classList.add('text-green-600');
-                        el.classList.add('font-bold');
-                    } else {
-                        el.classList.remove('text-green-600');
-                        el.classList.add('text-red-600');
-                        el.classList.add('font-bold');
-                    }
-                }
-            }
-            newPasswordInput.addEventListener('input', updateRequirementsDisplay);
-            updateRequirementsDisplay();
-            form.onsubmit = async function(e) {
-                e.preventDefault();
-                const newPassword = document.getElementById('newPassword').value;
-                const confirmPassword = document.getElementById('confirmPassword').value;
-                msg.textContent = "";
-                for (const req of passwordRequirements) {
-                    if (!req.regex.test(newPassword)) {
-                        msg.textContent = req.message;
-                        return;
-                    }
-                }
-                if (newPassword !== confirmPassword) {
-                    msg.textContent = "Passwords do not match.";
-                    return;
-                }
-                const response = await fetch('/api/reset-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, token, new_password: newPassword })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    msg.className = 'msg text-center mt-4 min-h-[24px] text-green-600 font-medium';
-                    msg.textContent = "Password changed successfully!";
-                    form.style.display = 'none';
-                } else {
-                    msg.className = 'msg text-center mt-4 min-h-[24px] text-red-600 font-medium';
-                    msg.textContent = result.error || "Failed to change password.";
-                }
-            };
-        } else {
-            // Generic info mode
-            form.style.display = 'none';
-            goToEmailBtn.style.display = '';
-            mainTitle.textContent = 'Message';
-            mainMessage.textContent = 'Welcome to Praisehub!';
+    <style>
+        body, html {
+            font-family: 'Lexend', sans-serif !important;
+            font-size: 0.8rem !important;
         }
-        goToEmailBtn.onclick = function() {
-            const params = new URLSearchParams(window.location.search);
-            const email = params.get('email') || '';
-            let provider = 'gmail';
-            if (email.includes('@yahoo')) provider = 'yahoo';
-            else if (email.includes('@outlook') || email.includes('@hotmail')) provider = 'outlook';
-            let url = 'https://mail.google.com';
-            if (provider === 'yahoo') url = 'https://mail.yahoo.com';
-            if (provider === 'outlook') url = 'https://outlook.live.com';
-            window.open(url, '_blank');
-        };
-    });
+        .tabulator, .tabulator * {
+            font-family: 'Lexend', sans-serif !important;
+            font-size: 0.8rem !important;
+        }
+        .material-symbols-outlined {
+            font-variation-settings:
+                'FILL' 0,
+                'wght' 400,
+                'GRAD' 0,
+                'opsz' 24;
+            font-size: 2rem;
+            color: #48483c;
+        }
+        .btn-disabled .material-symbols-outlined,
+        .btn-disabled span {
+            color: #bdbdbd !important;
+        }
+        .btn-live {
+            background-color: #48483c !important;
+            color: #fff !important;
+        }
+        .btn-live .material-symbols-outlined {
+            color: #fff !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen w-full" id="praisehub-app">
+    <!-- Top Toolbar -->
+    <div class="flex justify-between items-center w-full px-8 pt-6" id="toolbar">
+        <div class="flex space-x-6" id="toolbar-left">
+            <button id="btn-open" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">schedule</span>
+                <span>Open</span>
+            </button>
+            <button id="btn-save" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center btn-disabled toolbar-btn" disabled>
+                <span class="material-symbols-outlined">refresh</span>
+                <span>Save</span>
+            </button>
+            <button id="btn-add-song" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">queue_music</span>
+                <span>Add Song</span>
+            </button>
+            <button id="btn-settings" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">settings</span>
+                <span>Settings</span>
+            </button>
+        </div>
+        <div class="flex space-x-6" id="toolbar-right">
+            <button id="btn-logo" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">image_search</span>
+                <span>Logo</span>
+            </button>
+            <button id="btn-black" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">smart_display</span>
+                <span>Black</span>
+            </button>
+            <button id="btn-clear" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
+                <span class="material-symbols-outlined">cancel</span>
+                <span>Clear</span>
+            </button>
+            <button id="btn-live" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center btn-live toolbar-btn">
+                <span class="material-symbols-outlined">present_to_all</span>
+                <span>Live</span>
+            </button>
+        </div>
+    </div>
+    <!-- Main Panels -->
+    <div class="flex w-full px-8 mt-6 space-x-6" id="main-panels">
+        <!-- Schedule Panel -->
+        <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-schedule">
+            <h3 class="font-bold text-lg mb-2" id="schedule-title">Schedule</h3>
+            <div class="flex-1 flex items-center justify-center text-gray-500 border-t border-gray-200 pt-2" id="schedule-empty">
+                No items in the schedule. Add songs, bible verses, or notes to get started.
+            </div>
+        </div>
+        <!-- Preview Panel -->
+        <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-preview">
+            <h3 class="font-bold text-lg mb-2" id="preview-title">Preview - Genesis 1:1</h3>
+            <div class="bg-gray-200 rounded p-3 mb-4" id="preview-header">
+                <span class="font-bold text-yellow-700" id="preview-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                <div class="mt-2 text-gray-700 text-sm" id="preview-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
+            </div>
+            <div class="flex justify-center mt-16" id="preview-main">
+                <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="preview-slide">
+                    <span class="block text-xl font-bold" id="preview-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
+                    <span class="text-yellow-400 text-sm block mt-2" id="preview-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                    <div class="text-xs text-gray-400 mt-2" id="preview-slide-resolution">1920 x 1080</div>
+                </div>
+            </div>
+        </div>
+        <!-- Live Panel -->
+        <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-live">
+            <h3 class="font-bold text-lg mb-2" id="live-title">Live - Genesis 1:1</h3>
+            <div class="bg-gray-200 rounded p-3 mb-4" id="live-header">
+                <span class="font-bold text-yellow-700" id="live-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                <div class="mt-2 text-gray-700 text-sm" id="live-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
+            </div>
+            <div class="flex justify-center mt-16" id="live-main">
+                <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="live-slide">
+                    <span class="block text-xl font-bold" id="live-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
+                    <span class="text-yellow-400 text-sm block mt-2" id="live-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                    <div class="text-xs text-gray-400 mt-2" id="live-slide-resolution">1920 x 1080</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Tabs and Table -->
+    <div class="w-full px-8 mt-8 flex" id="tabs-table-section">
+        <!-- Left Sidebar -->
+        <div class="w-80 mr-6" id="sidebar">
+            <div class="bg-white rounded-xl shadow-md p-4 mb-4" id="sidebar-translation">
+                <label class="font-semibold mb-2 block" for="bible-translation">Select Bible Translation:</label>
+                <select class="w-full border rounded px-2 py-1 mb-4 font-bold" id="bible-translation">
+                    <option>Ang Salita ng Dios (ASND)</option>
+                </select>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-4" id="sidebar-reference">
+                <label class="font-semibold mb-2 block" for="bible-reference">Search Bible Reference</label>
+                <div class="flex items-center space-x-2" id="reference-search">
+                    <input type="text" value="Genesis" class="border rounded px-2 py-1 w-24 font-bold" id="reference-book">
+                    <input type="number" value="1" class="border rounded px-2 py-1 w-12 font-bold" id="reference-chapter">
+                    <span>:</span>
+                    <input type="number" value="1" class="border rounded px-2 py-1 w-12 font-bold" id="reference-verse">
+                </div>
+            </div>
+        </div>
+        <!-- Main Content -->
+        <div class="flex-1" id="main-content">
+            <!-- Tabs -->
+            <div class="flex space-x-2 mb-2" id="tabs">
+                <button class="px-4 py-2 rounded-t bg-white font-semibold border-b-2 border-blue-600 shadow tab-btn" id="tab-songs">Songs</button>
+                <button class="px-4 py-2 rounded-t bg-white font-semibold text-gray-500 shadow tab-btn" id="tab-scriptures">Scriptures</button>
+                <button class="px-4 py-2 rounded-t bg-white font-semibold text-gray-500 shadow tab-btn" id="tab-media">Media</button>
+            </div>
+            <!-- Tabulator Table -->
+            <div class="bg-white rounded-xl shadow-md p-4 overflow-x-auto" id="table-container">
+                <div id="scripture-table"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Tabulator CDN -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    <script src="/static/js/praisehub.js"></script>
+    <script>
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        document.getElementById('btn-live').addEventListener('click', async function() {
+            // 1. Setup default positioning (Current Monitor)
+            let left = window.screenX;
+            let top = window.screenY;
+            let width = 800;
+            let height = 600;
+
+            // 2. Try to detect Second Screen using Window Management API
+            if ('getScreenDetails' in window) {
+                try {
+                    const screenDetails = await window.getScreenDetails();
+                    // Find the first screen that is NOT the one the browser is currently on
+                    const secondaryScreen = screenDetails.screens.find(s => s !== screenDetails.currentScreen);
+
+                    if (secondaryScreen) {
+                        left = secondaryScreen.availLeft;
+                        top = secondaryScreen.availTop;
+                        width = secondaryScreen.availWidth;
+                        height = secondaryScreen.availHeight;
+                    }
+                } catch (err) {
+                    console.error("Multi-screen permission denied or error:", err);
+                }
+            }
+
+            // 3. Open the Live Window
+            const features = `left=${left},top=${top},width=${width},height=${height},menubar=no,toolbar=no,location=no,status=no`;
+            const win = window.open("", "PraisehubLive", features);
+
+            if (win) {
+                // Grab current live data
+                const verseText = document.getElementById('live-slide-verse').innerText;
+                const refText = document.getElementById('live-slide-ref').innerText;
+
+                win.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Praisehub Live</title>
+                        <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@700&display=swap" rel="stylesheet">
+                        <style>
+                            body {
+                                margin: 0;
+                                background: #000;
+                                color: #fff;
+                                font-family: 'Lexend', sans-serif;
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: center;
+                                align-items: center;
+                                height: 100vh;
+                                overflow: hidden;
+                                text-align: center;
+                                cursor: none;
+                            }
+                            .container { padding: 40px; }
+                            .verse { font-size: 4.5rem; line-height: 1.2; margin-bottom: 30px; }
+                            .ref { font-size: 2rem; color: #facc15; }
+                            .overlay-blur {
+                                position: fixed;
+                                top: 0; left: 0; width: 100vw; height: 100vh;
+                                background: rgba(0,0,0,0.5);
+                                backdrop-filter: blur(8px);
+                                display: flex;
+                                justify-content: center;
+                                align-items: center;
+                                z-index: 9999;
+                            }
+                            .overlay-buttons {
+                                display: flex;
+                                flex-direction: column;
+                                align-items: center;
+                                position: relative;
+                            }
+                            .fullscreen-btn {
+                                background: #facc15;
+                                color: #222;
+                                font-size: 1.2rem;
+                                font-weight: bold;
+                                padding: 0.75rem 1.5rem;
+                                border: none;
+                                border-radius: 2rem;
+                                box-shadow: 0 4px 32px rgba(0,0,0,0.2);
+                                cursor: pointer;
+                                transition: background 0.2s;
+                                position: relative;
+                            }
+                            .fullscreen-btn:hover {
+                                background: #ffe066;
+                            }
+                            .close-x-btn {
+                                position: absolute;
+                                top: 0.2rem;
+                                right: 0.2rem;
+                                background: #fff;
+                                color: #222;
+                                font-size: 1.2rem;
+                                font-weight: bold;
+                                width: 2rem;
+                                height: 2rem;
+                                border: none;
+                                border-radius: 50%;
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                                cursor: pointer;
+                                display: none;
+                                align-items: center;
+                                justify-content: center;
+                                transition: background 0.2s;
+                                z-index: 10;
+                            }
+                            .fullscreen-btn:hover + .close-x-btn,
+                            .close-x-btn:hover {
+                                display: flex;
+                            }
+                            .close-x-btn:hover {
+                                background: #e5e7eb;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container" id="main-content">
+                            <div class="verse">${verseText}</div>
+                            <div class="ref">${refText}</div>
+                        </div>
+                        <div class="overlay-blur" id="fullscreen-overlay">
+                            <div class="overlay-buttons">
+                                <button class="fullscreen-btn" id="fullscreen-btn">Enter Full Screen</button>
+                                <button class="close-x-btn" id="close-x-btn" title="Close Overlay">&#10005;</button>
+                            </div>
+                        </div>
+                        <script>
+                            document.getElementById('fullscreen-btn').addEventListener('click', function() {
+                                if (document.documentElement.requestFullscreen) {
+                                    document.documentElement.requestFullscreen();
+                                }
+                                document.getElementById('fullscreen-overlay').style.display = 'none';
+                                // Remove cursor hiding here
+                            });
+
+                            document.getElementById('close-x-btn').addEventListener('click', function() {
+                                document.getElementById('fullscreen-overlay').style.display = 'none';
+                                document.body.style.cursor = 'auto';
+                            });
+
+                            document.addEventListener('fullscreenchange', function() {
+                                if (!document.fullscreenElement) {
+                                    // Fullscreen exited, show overlay and cursor
+                                    document.getElementById('fullscreen-overlay').style.display = 'flex';
+                                    document.body.style.cursor = 'auto';
+                                } else {
+                                    // Hide cursor only in fullscreen mode
+                                    document.body.style.cursor = 'none';
+                                }
+                            });
+
+                            // Always show cursor when overlay is visible
+                            const observer = new MutationObserver(function() {
+                                const overlay = document.getElementById('fullscreen-overlay');
+                                if (overlay && overlay.style.display !== 'none') {
+                                    document.body.style.cursor = 'auto';
+                                }
+                            });
+                            observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+
+                            // Add F key shortcut for fullscreen and exit fullscreen
+                            document.addEventListener('keydown', function(e) {
+                                if (e.key === 'f' || e.key === 'F') {
+                                    if (document.fullscreenElement) {
+                                        // If already in fullscreen, exit fullscreen
+                                        if (document.exitFullscreen) {
+                                            document.exitFullscreen();
+                                        }
+                                    } else {
+                                        // Not in fullscreen, enter fullscreen
+                                        if (document.documentElement.requestFullscreen) {
+                                            document.documentElement.requestFullscreen();
+                                        }
+                                        document.getElementById('fullscreen-overlay').style.display = 'none';
+                                        // Remove cursor hiding here
+                                    }
+                                }
+                            });
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                win.document.close();
+            }
+        });
     </script>
 </body>
 </html>
