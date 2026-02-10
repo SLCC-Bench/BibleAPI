@@ -59,10 +59,20 @@ def upload_bible():
         ).fetchone()
         src_year = src_year[0] if src_year else year
 
-        # Get verses
+        # Get verses with book_number for story linking
         verses_data = cursor.execute(
-            "SELECT b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number ORDER BY v.book_number, v.chapter, v.verse"
+            "SELECT b.book_number, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number ORDER BY v.book_number, v.chapter, v.verse"
         ).fetchall()
+
+        # Get story titles, keyed by (book_number, chapter, verse)
+        story_titles = {}
+        try:
+            cursor.execute("SELECT book_number, chapter, verse, title FROM stories")
+            for row in cursor.fetchall():
+                book_number, chapter, verse, title = row
+                story_titles[(book_number, chapter, verse)] = title
+        except Exception:
+            story_titles = {}
 
         conn.close()
         os.remove(upload_path)
@@ -75,13 +85,17 @@ def upload_bible():
             "year": src_year
         }
         verses = []
-        for book, chapter, verse, text in verses_data:
+        for book_number, book, chapter, verse, text in verses_data:
             reference = f"{book} {chapter}:{verse}"
-            verses.append({
+            verse_entry = {
                 "Translation": bible_name,
                 "Reference": reference,
                 "Verse": text
-            })
+            }
+            story_title = story_titles.get((book_number, chapter, verse))
+            if story_title:
+                verse_entry["StoryTitle"] = story_title
+            verses.append(verse_entry)
 
         bible_json = {
             "translation": translation_info,
