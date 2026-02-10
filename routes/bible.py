@@ -125,3 +125,139 @@ def download_bible_db():
 @bible_bp.route('/api/download/bible/zip', methods=['GET'])
 def download_bible_zip():
     return jsonify(error="Bible database not found."), 404
+
+@bible_bp.route('/api/books')
+def list_books():
+    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
+    books_info = {book: {} for book in STANDARD_BOOKS}
+    # Find first available translation file
+    json_file = None
+    for fname in os.listdir(bible_folder):
+        if fname.lower().endswith('.json'):
+            json_file = os.path.join(bible_folder, fname)
+            break
+    if json_file:
+        with open(json_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            verses = data.get("verses", [])
+            for v in verses:
+                book = v.get("BookName") or v.get("Reference", "").split()[0]
+                chapter = v.get("ChapterNumber") or 1
+                verse = v.get("VerseNumber") or 1
+                if book not in books_info:
+                    books_info[book] = {}
+                if chapter not in books_info[book]:
+                    books_info[book][chapter] = set()
+                books_info[book][chapter].add(verse)
+    # Convert sets to sorted lists
+    books_dict = {}
+    for book in STANDARD_BOOKS:
+        chapters = books_info.get(book, {})
+        chapters_dict = {str(ch): sorted(list(verses)) for ch, verses in chapters.items()}
+        books_dict[book] = {
+            "chapters": sorted([int(ch) for ch in chapters_dict.keys()]),
+            "verses": chapters_dict
+        }
+    return Response(json.dumps({
+        "books": STANDARD_BOOKS,
+        "bookDetails": books_dict
+    }, ensure_ascii=False), mimetype='application/json')
+
+@bible_bp.route('/api/books/<translation>')
+def list_books_for_translation(translation):
+    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
+    books_info = {book: {} for book in STANDARD_BOOKS}
+    # Find translation file by name
+    json_file = None
+    for fname in os.listdir(bible_folder):
+        if fname.lower().endswith('.json'):
+            try:
+                with open(os.path.join(bible_folder, fname), 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    t = data.get("translation", {})
+                    if t.get("name", "").lower() == translation.lower():
+                        json_file = os.path.join(bible_folder, fname)
+                        break
+            except Exception:
+                continue
+    if json_file:
+        with open(json_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            verses = data.get("verses", [])
+            for v in verses:
+                book = v.get("BookName") or v.get("Reference", "").split()[0]
+                chapter = v.get("ChapterNumber") or 1
+                verse = v.get("VerseNumber") or 1
+                if book not in books_info:
+                    books_info[book] = {}
+                if chapter not in books_info[book]:
+                    books_info[book][chapter] = set()
+                books_info[book][chapter].add(verse)
+    # Convert sets to sorted lists
+    books_dict = {}
+    for book in STANDARD_BOOKS:
+        chapters = books_info.get(book, {})
+        chapters_dict = {str(ch): sorted(list(verses)) for ch, verses in chapters.items()}
+        books_dict[book] = {
+            "chapters": sorted([int(ch) for ch in chapters_dict.keys()]),
+            "verses": chapters_dict
+        }
+    return Response(json.dumps({
+        "books": STANDARD_BOOKS,
+        "bookDetails": books_dict
+    }, ensure_ascii=False), mimetype='application/json')
+
+@bible_bp.route('/api/book-structure/<translation>')
+def book_structure(translation):
+    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
+    json_file = None
+    for fname in os.listdir(bible_folder):
+        if fname.lower().endswith('.json'):
+            try:
+                with open(os.path.join(bible_folder, fname), 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    t = data.get("translation", {})
+                    if t.get("name", "").lower() == translation.lower():
+                        json_file = os.path.join(bible_folder, fname)
+                        break
+            except Exception:
+                continue
+
+    if not json_file:
+        return jsonify(error=f"Translation '{translation}' not found."), 404
+
+    with open(json_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        verses = data.get("verses", [])
+
+    # Build structure: {BookName: {BookNameSortingOrder, chapters: {chapter: [verses]}}}
+    book_map = {}
+    for v in verses:
+        book = v.get("BookName")
+        sorting_order = v.get("BookNameSortingOrder")
+        chapter = v.get("ChapterNumber")
+        verse = v.get("VerseNumber")
+        if book is None or sorting_order is None or chapter is None or verse is None:
+            continue
+        if book not in book_map:
+            book_map[book] = {
+                "BookNameSortingOrder": sorting_order,
+                "BookName": book,
+                "chapters": {}
+            }
+        if chapter not in book_map[book]["chapters"]:
+            book_map[book]["chapters"][chapter] = []
+        if verse not in book_map[book]["chapters"][chapter]:
+            book_map[book]["chapters"][chapter].append(verse)
+
+    # Sort chapters and verses
+    for book in book_map.values():
+        chapters = book["chapters"]
+        for ch in chapters:
+            chapters[ch] = sorted(chapters[ch])
+        book["chapters"] = dict(sorted(chapters.items(), key=lambda x: int(x[0])))
+
+    # Sort books by BookNameSortingOrder
+    sorted_books = sorted(book_map.values(), key=lambda b: b["BookNameSortingOrder"])
+
+    return jsonify({"books": sorted_books})

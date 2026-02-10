@@ -44,6 +44,12 @@
         .btn-live .material-symbols-outlined {
             color: #fff !important;
         }
+        .sidebar-width {
+            width: 20rem; /* 80 x 0.25rem = 20rem, matches w-80 */
+            min-width: 20rem;
+            max-width: 20rem;
+            transition: width 0.2s;
+        }
     </style>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -132,7 +138,7 @@
     <!-- Tabs and Table -->
     <div class="w-full px-8 mt-8 flex" id="tabs-table-section">
         <!-- Left Sidebar -->
-        <div class="w-80 mr-6" id="sidebar">
+        <div class="sidebar-width mr-6" id="sidebar">
             <div class="bg-white rounded-xl shadow-md p-4 mb-4" id="sidebar-translation">
                 <label class="font-semibold mb-2 block" for="bible-translation">Select Bible Translation:</label>
                 <select class="w-full border rounded px-2 py-1 mb-4 font-bold" id="bible-translation" style="width:100%">
@@ -140,12 +146,36 @@
                 </select>
             </div>
             <div class="bg-white rounded-xl shadow-md p-4" id="sidebar-reference">
-                <label class="font-semibold mb-2 block" for="bible-reference">Search Bible Reference</label>
-                <div class="flex items-center space-x-2" id="reference-search">
-                    <input type="text" value="Genesis" class="border rounded px-2 py-1 w-24 font-bold" id="reference-book">
-                    <input type="number" value="1" class="border rounded px-2 py-1 w-12 font-bold" id="reference-chapter">
-                    <span>:</span>
-                    <input type="number" value="1" class="border rounded px-2 py-1 w-12 font-bold" id="reference-verse">
+                <label class="font-semibold mb-2 block">Search Bible Reference</label>
+                <div class="relative">
+                    <div class="flex flex-wrap items-center gap-1 p-2 border bg-white rounded shadow-sm" id="referenceTextArea">
+                        <span id="book" class="editable-part font-bold" contenteditable="true" tabindex="0" data-placeholder="Book Name">Genesis</span>
+                        <span> </span>
+                        <span id="chapter" class="editable-part font-bold" contenteditable="true" tabindex="0" data-placeholder="1">1</span>
+                        <span>:</span>
+                        <span id="verse" class="editable-part font-bold" contenteditable="true" tabindex="0" data-placeholder="1">1</span>
+                    </div>
+                    <div class="absolute z-10 mt-1 flex gap-2">
+                        <div id="bookSuggestions" class="hidden bg-white border rounded shadow max-h-48 overflow-auto w-48"></div>
+                        <div id="chapterSuggestions" class="hidden bg-white border rounded shadow max-h-48 overflow-auto w-24"></div>
+                        <div id="verseSuggestions" class="hidden bg-white border rounded shadow max-h-48 overflow-auto w-24"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-4" id="sidebar-song-search" style="display:none;">
+                <label class="font-semibold mb-2 block" for="song-search">Search Song</label>
+                <input type="text" id="song-search" class="border rounded px-2 py-1 w-full" placeholder="Type song title or lyrics...">
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-4" id="sidebar-media-tabs" style="display:none;">
+                <div class="flex flex-col mb-4" id="media-tabs">
+                    <button class="px-4 py-2 rounded bg-white font-semibold text-gray-500 shadow tab-btn mb-2" id="media-tab-image">Image</button>
+                    <button class="px-4 py-2 rounded bg-white font-semibold text-gray-500 shadow tab-btn mb-2" id="media-tab-video">Video</button>
+                    <button class="px-4 py-2 rounded bg-white font-semibold text-gray-500 shadow tab-btn" id="media-tab-presentation">Presentation</button>
+                </div>
+                <div id="media-tab-content">
+                    <div id="media-image-content" style="display:none;">Select or upload images here.</div>
+                    <div id="media-video-content" style="display:none;">Select or upload videos here.</div>
+                    <div id="media-presentation-content" style="display:none;">Select or upload presentations here.</div>
                 </div>
             </div>
         </div>
@@ -153,21 +183,75 @@
         <div class="flex-1" id="main-content">
             <!-- Tabs -->
             <div class="flex space-x-2 mb-2" id="tabs">
-                <button class="px-4 py-2 rounded-t bg-white font-semibold border-b-2 border-blue-600 shadow tab-btn" id="tab-songs">Songs</button>
-                <button class="px-4 py-2 rounded-t bg-white font-semibold text-gray-500 shadow tab-btn" id="tab-scriptures">Scriptures</button>
+                <button class="px-4 py-2 rounded-t bg-white font-semibold border-b-2 border-blue-600 shadow tab-btn" id="tab-scriptures">Scriptures</button>
+                <button class="px-4 py-2 rounded-t bg-white font-semibold text-gray-500 shadow tab-btn" id="tab-songs">Songs</button>
                 <button class="px-4 py-2 rounded-t bg-white font-semibold text-gray-500 shadow tab-btn" id="tab-media">Media</button>
             </div>
             <!-- Tabulator Table -->
-            <div class="bg-white rounded-xl shadow-md p-4 h-full" id="table-container">
+            <div class="bg-white rounded-xl shadow-md p-4" id="table-container">
                 <div id="scripture-table"></div>
+                <div id="songs-tab-content" style="display:none;">
+                    <table id="songs-table" class="min-w-full table-auto border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="px-4 py-2 border-b text-left font-bold">Title</th>
+                                <th class="px-4 py-2 border-b text-left font-bold">Author</th>
+                                <th class="px-4 py-2 border-b text-left font-bold">Album</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="px-4 py-2 border-b text-gray-500" colspan="3">No songs loaded. Search to add songs.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
     <!-- Tabulator CDN -->
     <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator.min.css" rel="stylesheet">
     <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+    <script src="/static/js/song-table.js"></script>
     <script src="/static/js/bible-translation-dropdown.js"></script>
     <script src="/static/js/scripture-table.js"></script>
     <script src="/static/js/praisehub.js"></script>
+    <script src="/static/js/tab-switch.js"></script>
+    <script>
+    // Tab switching logic
+    $(function() {
+        function activateTab(tab) {
+            // Reset all tabs
+            $('#tab-scriptures').removeClass('border-b-2 border-blue-600 text-black').addClass('text-gray-500');
+            $('#tab-songs').removeClass('border-b-2 border-blue-600 text-black').addClass('text-gray-500');
+            // Hide all tab contents and sidebars
+            $('#scripture-table').hide();
+            $('#songs-tab-content').hide();
+            $('#sidebar-translation').hide();
+            $('#sidebar-reference').hide();
+            $('#sidebar-song-search').hide();
+
+            if(tab === 'scriptures') {
+                $('#tab-scriptures').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
+                $('#scripture-table').show();
+                $('#sidebar-translation').show();
+                $('#sidebar-reference').show();
+            } else if(tab === 'songs') {
+                $('#tab-songs').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
+                $('#songs-tab-content').show();
+                $('#sidebar-song-search').show();
+            } else if(tab === 'media') {
+                $('#tab-media').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
+                $('#sidebar-media-tabs').show();
+            }
+        }
+        // Default tab
+        activateTab('scriptures');
+        $('#tab-scriptures').on('click', function() { activateTab('scriptures'); });
+        $('#tab-songs').on('click', function() { activateTab('songs'); });
+        $('#tab-media').on('click', function() { activateTab('media'); });
+    });
+    // Remove dummy songs-table JS, since table is now static
+    </script>
 </body>
 </html>

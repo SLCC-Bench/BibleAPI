@@ -59,9 +59,9 @@ def upload_bible():
         ).fetchone()
         src_year = src_year[0] if src_year else year
 
-        # Get verses with book_number for story linking
+        # Get verses with book_number and sorting_order for story linking
         verses_data = cursor.execute(
-            "SELECT b.book_number, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number ORDER BY v.book_number, v.chapter, v.verse"
+            "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number ORDER BY b.sorting_order, v.chapter, v.verse"
         ).fetchall()
 
         # Get story titles, keyed by (book_number, chapter, verse)
@@ -85,11 +85,15 @@ def upload_bible():
             "year": src_year
         }
         verses = []
-        for book_number, book, chapter, verse, text in verses_data:
+        for book_number, sorting_order, book, chapter, verse, text in verses_data:
             reference = f"{book} {chapter}:{verse}"
             verse_entry = {
                 "Translation": bible_name,
                 "Reference": reference,
+                "BookNameSortingOrder": sorting_order,
+                "BookName": book,
+                "ChapterNumber": chapter,
+                "VerseNumber": verse,
                 "Verse": text
             }
             story_title = story_titles.get((book_number, chapter, verse))
