@@ -4,9 +4,61 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Helper to load and display verses in the scripture-table using Tabulator with virtual DOM
     async function loadScriptureTable(translationName) {
+            // Flag to suppress MutationObserver during manual row click
+            let suppressReferenceObserver = false;
+        // Initialize tableDiv at the top
         const tableDiv = document.getElementById('scripture-table');
         if (!tableDiv) return;
         tableDiv.innerHTML = 'Loading...';
+
+        // Listen for changes in book, chapter, verse spans and update table selection
+        function selectTableRowFromReference() {
+            const bookSpan = document.getElementById('book');
+            const chapterSpan = document.getElementById('chapter');
+            const verseSpan = document.getElementById('verse');
+            if (!bookSpan || !chapterSpan || !verseSpan) return;
+            const book = bookSpan.textContent.trim();
+            const chapter = chapterSpan.textContent.trim();
+            const verse = verseSpan.textContent.trim();
+            const ref = `${book} ${chapter}:${verse}`;
+            if (!tableDiv._tabulator) return;
+            const tabulator = tableDiv._tabulator;
+            const allRows = tabulator.getRows();
+            const allData = tabulator.getData();
+            const rowIndex = allData.findIndex(d => d.Reference === ref);
+            if (suppressReferenceObserver) return;
+            if (rowIndex >= 0) {
+                tabulator.deselectRow();
+                allRows[rowIndex].select();
+                // Only scroll if not triggered by mouse (i.e., only for programmatic/search navigation)
+                if (!window._suppressScrollOnSelect) {
+                    const tableHolder = tableDiv.querySelector('.tabulator-tableholder');
+                    if (tableHolder) {
+                        const holderRect = tableHolder.getBoundingClientRect();
+                        const rowElem = allRows[rowIndex].getElement();
+                        const rowRect = rowElem.getBoundingClientRect();
+                        if (rowRect.top < holderRect.top) {
+                            allRows[rowIndex].scrollTo("top");
+                        } else if (rowRect.bottom > holderRect.bottom) {
+                            allRows[rowIndex].scrollTo("bottom");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Use MutationObserver for contenteditable spans
+        function observeSpan(span) {
+            if (!span) return;
+            const observer = new MutationObserver(() => {
+                selectTableRowFromReference();
+            });
+            observer.observe(span, { childList: true, characterData: true, subtree: true });
+            span.addEventListener('blur', selectTableRowFromReference);
+        }
+        ['book', 'chapter', 'verse'].forEach(id => {
+            observeSpan(document.getElementById(id));
+        });
         try {
             const res = await fetch(`/api/verses/${encodeURIComponent(translationName)}`);
             if (!res.ok) {
@@ -40,60 +92,119 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             tableDiv._tabulator = tabulator;
 
+            // Helper to update reference spans
+            function updateReferenceSpans(rowData) {
+                if (!rowData || !rowData.Reference) return;
+                // Reference format: Book Chapter:Verse
+                const refMatch = rowData.Reference.match(/^([\w\s]+)\s+(\d+):(\d+)$/);
+                if (refMatch) {
+                    const bookSpan = document.getElementById('book');
+                    const chapterSpan = document.getElementById('chapter');
+                    const verseSpan = document.getElementById('verse');
+                    if (bookSpan) bookSpan.textContent = refMatch[1];
+                    if (chapterSpan) chapterSpan.textContent = refMatch[2];
+                    if (verseSpan) verseSpan.textContent = refMatch[3];
+                }
+            }
+
+            // Select and highlight the first row after table is fully built
+            tabulator.on("tableBuilt", function() {
+                const rows = tabulator.getRows();
+                if (rows.length > 0) {
+                    tabulator.deselectRow();
+                    rows[0].select();
+                    updateReferenceSpans(rows[0].getData());
+                }
+            });
+
             let lastClickedRowIndex = null;
 
             // Keyboard navigation for row selection
             tableDiv.tabIndex = 0; // Make div focusable
 
             tableDiv.addEventListener('keydown', function(e) {
+                // No debounce: process every ArrowUp/ArrowDown event immediately for max speed
+
+                // Handle navigation to referenceTextArea spans
+                if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    // Determine which span to focus based on direction
+                    // Default: book > chapter > verse > book
+                    const bookSpan = document.getElementById('book');
+                    const chapterSpan = document.getElementById('chapter');
+                    const verseSpan = document.getElementById('verse');
+                    let target = null;
+                    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowRight') {
+                        // Move to book span by default
+                        target = bookSpan;
+                    } else if ((e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowLeft') {
+                        // Move to verse span by default
+                        target = verseSpan;
+                    }
+                    if (target) {
+                        target.focus();
+                        setTimeout(() => {
+                            const sel = window.getSelection();
+                            const range = document.createRange();
+                            range.selectNodeContents(target);
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        }, 0);
+                    }
+                    return;
+                }
+
                 if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 
                 const selectedRows = tabulator.getSelectedRows();
                 if (!selectedRows.length) return;
 
                 const currentRow = selectedRows[0];
-                const currentData = currentRow.getData();
-                const allData = tabulator.getData();
-                const currentIndex = allData.findIndex(d =>
-                    d.Translation === currentData.Translation &&
-                    d.Reference === currentData.Reference &&
-                    d.Verse === currentData.Verse
-                );
-
-                let newIndex = currentIndex;
-                if (e.key === 'ArrowDown' && currentIndex < allData.length - 1) {
-                    newIndex++;
-                } else if (e.key === 'ArrowUp' && currentIndex > 0) {
-                    newIndex--;
-                } else {
-                    return;
-                }
+                const nextRow = (e.key === 'ArrowDown')
+                                ? currentRow.getNextRow()
+                                : currentRow.getPrevRow();
+                if (!nextRow || nextRow === currentRow) return;
 
                 e.preventDefault();
-                // Deselect old row
-                tabulator.deselectRow();
+                currentRow.deselect();
+                nextRow.select();
 
-                // Select new row
-                const newRow = tabulator.getRows()[newIndex];
-                if (newRow) {
-                    newRow.select();
+                requestAnimationFrame(() => {
+                    // Update reference spans to match selected row
+                    const rowData = nextRow.getData();
+                    if (rowData && rowData.Reference) {
+                        const refMatch = rowData.Reference.match(/^([\w\s]+)\s+(\d+):(\d+)$/);
+                        if (refMatch) {
+                            const bookSpan = document.getElementById('book');
+                            const chapterSpan = document.getElementById('chapter');
+                            const verseSpan = document.getElementById('verse');
+                            if (bookSpan) bookSpan.textContent = refMatch[1];
+                            if (chapterSpan) chapterSpan.textContent = refMatch[2];
+                            if (verseSpan) verseSpan.textContent = refMatch[3];
+                        }
+                    }
 
                     // Only scroll if not fully visible
                     const tableHolder = tableDiv.querySelector('.tabulator-tableholder');
                     if (tableHolder) {
                         const holderRect = tableHolder.getBoundingClientRect();
-                        const rowElem = newRow.getElement();
+                        const rowElem = nextRow.getElement();
                         const rowRect = rowElem.getBoundingClientRect();
                         if (rowRect.top < holderRect.top) {
-                            newRow.scrollTo("top");
+                            nextRow.scrollTo("top");
                         } else if (rowRect.bottom > holderRect.bottom) {
-                            newRow.scrollTo("bottom");
+                            nextRow.scrollTo("bottom");
                         }
                     }
-                }
+
+                    // Dispatch event for row selection (for UI sync)
+                    window.dispatchEvent(new CustomEvent('bible-rows-selected', {
+                        detail: { bibleData: [nextRow.getData()] }
+                    }));
+                });
             });
 
-            // Shift+Click range selection
+            // Shift+Click range selection and update reference spans
             tabulator.on("rowClick", function(e, row) {
                 const allRows = tabulator.getRows();
                 const allData = tabulator.getData();
@@ -118,6 +229,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     row.select();
                     lastClickedRowIndex = clickedIndex;
                 }
+                // Suppress scrollTo('top') for mouse selection
+                window._suppressScrollOnSelect = true;
+                suppressReferenceObserver = true;
+                updateReferenceSpans(clickedData);
+                setTimeout(() => {
+                    suppressReferenceObserver = false;
+                    window._suppressScrollOnSelect = false;
+                }, 0);
+                // Do NOT scroll to top on row click
             });
         } catch (e) {
             tableDiv.innerHTML = 'Error loading verses.';
