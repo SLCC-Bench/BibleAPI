@@ -8,6 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        :root {
+            --praisehub-primary: #161D4B;
+        }
         body, html {
             font-family: 'Lexend', sans-serif !important;
             font-size: 0.8rem !important;
@@ -31,25 +34,34 @@
                 'GRAD' 0,
                 'opsz' 24;
             font-size: 2rem;
-            color: #48483c;
+            color: var(--praisehub-primary);
         }
         .btn-disabled .material-symbols-outlined,
         .btn-disabled span {
             color: #bdbdbd !important;
         }
         .btn-live {
-            background-color: #48483c !important;
+            background-color: var(--praisehub-primary) !important;
             color: #fff !important;
         }
         .btn-live .material-symbols-outlined {
             color: #fff !important;
         }
+        .toolbar-btn {
+            border: 2px solid transparent;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .toolbar-btn:hover {
+            border-color: var(--praisehub-primary);
+            background: #f3f4f6;
+        }
         .sidebar-width {
-            width: 20rem; /* 80 x 0.25rem = 20rem, matches w-80 */
-            min-width: 20rem;
-            max-width: 20rem;
+            width: 25rem; /* 100 x 0.25rem = 25rem, matches w-100 */
+            min-width: 25rem;
+            max-width: 25rem;
             transition: width 0.2s;
         }
+        /* Add more custom styles using --praisehub-primary as needed */
     </style>
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -76,6 +88,11 @@
                 <span>Settings</span>
             </button>
         </div>
+        <!-- SVG icon in the middle -->
+        <div class="flex flex-col justify-center items-center mx-4" id="toolbar-center">
+            <img src="/static/favicon.svg" alt="Praisehub Icon" style="height:4rem;width:4rem;display:block;">
+            <span class="font-bold text-lg" style="color:var(--praisehub-primary);letter-spacing:0.1em;">Praisehub</span>
+        </div>
         <div class="flex space-x-6" id="toolbar-right">
             <button id="btn-logo" class="bg-white shadow-md px-8 py-4 rounded-lg font-semibold flex flex-col items-center hover:bg-gray-100 toolbar-btn">
                 <span class="material-symbols-outlined">image_search</span>
@@ -98,7 +115,7 @@
     <!-- Main Panels -->
     <div class="flex w-full px-8 mt-6 space-x-6" id="main-panels">
         <!-- Schedule Panel -->
-        <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-schedule">
+        <div class="bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col sidebar-width" id="panel-schedule" style="flex: 0 0 25rem;">
             <h3 class="font-bold text-lg mb-2" id="schedule-title">Schedule</h3>
             <div class="flex-1 flex items-center justify-center text-gray-500 border-t border-gray-200 pt-2" id="schedule-empty">
                 No items in the schedule. Add songs, bible verses, or notes to get started.
@@ -106,31 +123,39 @@
         </div>
         <!-- Preview Panel -->
         <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-preview">
-            <h3 class="font-bold text-lg mb-2" id="preview-title">Preview - Genesis 1:1</h3>
-            <div class="bg-gray-200 rounded p-3 mb-4" id="preview-header">
-                <span class="font-bold text-yellow-700" id="preview-ref">Genesis 1:1 - Ang Salita ng Dios</span>
-                <div class="mt-2 text-gray-700 text-sm" id="preview-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
-            </div>
-            <div class="flex justify-center mt-16" id="preview-main">
-                <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="preview-slide">
-                    <span class="block text-xl font-bold" id="preview-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
-                    <span class="text-yellow-400 text-sm block mt-2" id="preview-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
-                    <div class="text-xs text-gray-400 mt-2" id="preview-slide-resolution">1920 x 1080</div>
+            <div class="flex flex-col h-full">
+                <div class="flex-1 mb-4" id="preview-upper">
+                    <h3 class="font-bold text-lg mb-2" id="preview-title">Preview - Genesis 1:1</h3>
+                    <div class="bg-gray-200 rounded p-3 mb-4" id="preview-header">
+                        <span class="font-bold text-yellow-700" id="preview-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                        <div class="mt-2 text-gray-700 text-sm" id="preview-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
+                    </div>
+                </div>
+                <div class="flex-1 flex justify-center items-center" id="preview-lower">
+                    <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="preview-slide">
+                        <span class="block text-xl font-bold" id="preview-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
+                        <span class="text-yellow-400 text-sm block mt-2" id="preview-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                        <div class="text-xs text-gray-400 mt-2" id="preview-slide-resolution">1920 x 1080</div>
+                    </div>
                 </div>
             </div>
         </div>
         <!-- Live Panel -->
         <div class="flex-1 bg-white rounded-xl shadow-md p-4 min-h-[400px] flex flex-col" id="panel-live">
-            <h3 class="font-bold text-lg mb-2" id="live-title">Live - Genesis 1:1</h3>
-            <div class="bg-gray-200 rounded p-3 mb-4" id="live-header">
-                <span class="font-bold text-yellow-700" id="live-ref">Genesis 1:1 - Ang Salita ng Dios</span>
-                <div class="mt-2 text-gray-700 text-sm" id="live-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
-            </div>
-            <div class="flex justify-center mt-16" id="live-main">
-                <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="live-slide">
-                    <span class="block text-xl font-bold" id="live-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
-                    <span class="text-yellow-400 text-sm block mt-2" id="live-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
-                    <div class="text-xs text-gray-400 mt-2" id="live-slide-resolution">1920 x 1080</div>
+            <div class="flex flex-col h-full">
+                <div class="flex-1 mb-4" id="live-upper">
+                    <h3 class="font-bold text-lg mb-2" id="live-title">Live - Genesis 1:1</h3>
+                    <div class="bg-gray-200 rounded p-3 mb-4" id="live-header">
+                        <span class="font-bold text-yellow-700" id="live-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                        <div class="mt-2 text-gray-700 text-sm" id="live-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</div>
+                    </div>
+                </div>
+                <div class="flex-1 flex justify-center items-center" id="live-lower">
+                    <div class="bg-black text-white rounded-lg px-8 py-6 text-lg font-bold shadow-lg text-center w-[320px]" id="live-slide">
+                        <span class="block text-xl font-bold" id="live-slide-verse">¹Nang pasimula, nilikha ng Dios ang langit at ang lupa.</span>
+                        <span class="text-yellow-400 text-sm block mt-2" id="live-slide-ref">Genesis 1:1 - Ang Salita ng Dios</span>
+                        <div class="text-xs text-gray-400 mt-2" id="live-slide-resolution">1920 x 1080</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -217,41 +242,7 @@
     <script src="/static/js/scripture-table.js"></script>
     <script src="/static/js/praisehub.js"></script>
     <script src="/static/js/tab-switch.js"></script>
-    <script>
-    // Tab switching logic
-    $(function() {
-        function activateTab(tab) {
-            // Reset all tabs
-            $('#tab-scriptures').removeClass('border-b-2 border-blue-600 text-black').addClass('text-gray-500');
-            $('#tab-songs').removeClass('border-b-2 border-blue-600 text-black').addClass('text-gray-500');
-            // Hide all tab contents and sidebars
-            $('#scripture-table').hide();
-            $('#songs-tab-content').hide();
-            $('#sidebar-translation').hide();
-            $('#sidebar-reference').hide();
-            $('#sidebar-song-search').hide();
-
-            if(tab === 'scriptures') {
-                $('#tab-scriptures').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
-                $('#scripture-table').show();
-                $('#sidebar-translation').show();
-                $('#sidebar-reference').show();
-            } else if(tab === 'songs') {
-                $('#tab-songs').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
-                $('#songs-tab-content').show();
-                $('#sidebar-song-search').show();
-            } else if(tab === 'media') {
-                $('#tab-media').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
-                $('#sidebar-media-tabs').show();
-            }
-        }
-        // Default tab
-        activateTab('scriptures');
-        $('#tab-scriptures').on('click', function() { activateTab('scriptures'); });
-        $('#tab-songs').on('click', function() { activateTab('songs'); });
-        $('#tab-media').on('click', function() { activateTab('media'); });
-    });
-    // Remove dummy songs-table JS, since table is now static
-    </script>
+    <!-- Autofill for #book span in sidebar moved to search-reference.js -->
+    <script src="/static/js/search-bible-reference.js"></script>
 </body>
 </html>
