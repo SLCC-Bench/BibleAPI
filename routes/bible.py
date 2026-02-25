@@ -230,18 +230,38 @@ def book_structure(translation):
         data = json.load(f)
         verses = data.get("verses", [])
 
-    # Build structure: {BookName: {BookNameSortingOrder, chapters: {chapter: [verses]}}}
+    # Build structure: {BookName: {BookNameSortingOrder (book_number), SortingNumber, chapters: {chapter: [verse]}}}
     book_map = {}
+    sorting_number_map = {}
+    current_sorting_number = 1
+    # Determine sorting number for each unique BookNameSortingOrder (book_number)
+    for v in verses:
+        book_number = v.get("BookNameSortingOrder")
+        try:
+            book_number = int(book_number)
+        except (TypeError, ValueError):
+            continue
+        if book_number not in sorting_number_map:
+            sorting_number_map[book_number] = current_sorting_number
+            current_sorting_number += 1
     for v in verses:
         book = v.get("BookName")
-        sorting_order = v.get("BookNameSortingOrder")
+        book_number = v.get("BookNameSortingOrder")
         chapter = v.get("ChapterNumber")
         verse = v.get("VerseNumber")
-        if book is None or sorting_order is None or chapter is None or verse is None:
+        # Ensure chapter and verse are integers for correct sorting and matching
+        try:
+            chapter = int(chapter)
+            verse = int(verse)
+            book_number = int(book_number)
+        except (TypeError, ValueError):
+            continue
+        if book is None or book_number is None or chapter is None or verse is None:
             continue
         if book not in book_map:
             book_map[book] = {
-                "BookNameSortingOrder": sorting_order,
+                "BookNameSortingOrder": book_number,
+                "SortingNumber": sorting_number_map[book_number],
                 "BookName": book,
                 "chapters": {}
             }
@@ -255,9 +275,10 @@ def book_structure(translation):
         chapters = book["chapters"]
         for ch in chapters:
             chapters[ch] = sorted(chapters[ch])
-        book["chapters"] = dict(sorted(chapters.items(), key=lambda x: int(x[0])))
+        # Ensure chapters are sorted by integer key
+        book["chapters"] = dict(sorted(chapters.items(), key=lambda x: x[0]))
 
-    # Sort books by BookNameSortingOrder
+    # Sort books by BookNameSortingOrder (book_number)
     sorted_books = sorted(book_map.values(), key=lambda b: b["BookNameSortingOrder"])
 
     return jsonify({"books": sorted_books})

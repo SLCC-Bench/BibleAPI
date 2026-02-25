@@ -9,19 +9,23 @@ $(function() {
         $('#sidebar-reference').hide();
         $('#sidebar-song-search').hide();
         $('#sidebar-media-tabs').hide();
+        $('#sidebar-book-suggestions').hide();
 
         if(tab === 'scriptures') {
             $('#tab-scriptures').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
             $('#scripture-table').show();
             $('#sidebar-translation').show();
             $('#sidebar-reference').show();
+            $('#sidebar-book-suggestions').show();
         } else if(tab === 'songs') {
             $('#tab-songs').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
             $('#songs-tab-content').show();
             $('#sidebar-song-search').show();
+            $('#sidebar-book-suggestions').hide();
         } else if(tab === 'media') {
             $('#tab-media').addClass('border-b-2 border-blue-600 text-black').removeClass('text-gray-500');
             $('#sidebar-media-tabs').show();
+            $('#sidebar-book-suggestions').hide();
             // Default to Image tab
             activateMediaTab('image');
         }

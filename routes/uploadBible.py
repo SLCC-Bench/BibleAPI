@@ -59,10 +59,34 @@ def upload_bible():
         ).fetchone()
         src_year = src_year[0] if src_year else year
 
-        # Get verses with book_number and sorting_order for story linking
-        verses_data = cursor.execute(
-            "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number ORDER BY b.sorting_order, v.chapter, v.verse"
-        ).fetchall()
+        # Get verses with book_number for story linking (use book_number as sorting reference)
+        # Check if sorting_order column exists
+        cursor.execute("PRAGMA table_info(books)")
+        columns = [row[1] for row in cursor.fetchall()]
+        # Log all long_name values from books table
+        try:
+            book_names = cursor.execute("SELECT long_name FROM books ORDER BY book_number").fetchall()
+            cleaned_book_names = [row[0].strip() if isinstance(row[0], str) else row[0] for row in book_names]
+            print("[UPLOAD BIBLE] Books (long_name):", cleaned_book_names)
+        except Exception as e:
+            print(f"[UPLOAD BIBLE] Error fetching long_name from books table: {e}")
+        if 'sorting_order' in columns:
+            verses_data = cursor.execute(
+                "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number"
+            ).fetchall()
+        else:
+            verses_data = cursor.execute(
+                "SELECT b.book_number, b.book_number as sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number"
+            ).fetchall()
+        # Sort verses_data in Python to ensure correct order (cast chapter and verse to int for sorting)
+        verses_data = sorted(
+            verses_data,
+            key=lambda row: (
+                int(row[0]),
+                int(row[3]) if not isinstance(row[3], int) and str(row[3]).isdigit() else row[3],
+                int(row[4]) if not isinstance(row[4], int) and str(row[4]).isdigit() else row[4]
+            )
+        )
 
         # Get story titles, keyed by (book_number, chapter, verse)
         story_titles = {}
@@ -85,13 +109,22 @@ def upload_bible():
             "year": src_year
         }
         verses = []
+        last_sorting_order = None
+        sorting_number = 0
         for book_number, sorting_order, book, chapter, verse, text in verses_data:
-            reference = f"{book} {chapter}:{verse}"
+            # Remove leading/trailing whitespace (including newlines) from book name
+            clean_book = book.strip() if isinstance(book, str) else book
+            # Increment sorting_number only when BookNameSortingOrder changes
+            if book_number != last_sorting_order:
+                sorting_number += 1
+                last_sorting_order = book_number
+            reference = f"{clean_book} {chapter}:{verse}"
             verse_entry = {
                 "Translation": bible_name,
                 "Reference": reference,
-                "BookNameSortingOrder": sorting_order,
-                "BookName": book,
+                "BookNameSortingOrder": book_number,  # Always use book_number as sorting reference
+                "SortingNumber": sorting_number,
+                "BookName": clean_book,
                 "ChapterNumber": chapter,
                 "VerseNumber": verse,
                 "Verse": text
