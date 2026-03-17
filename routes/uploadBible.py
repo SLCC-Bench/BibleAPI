@@ -19,8 +19,8 @@ def clean_verse_text(text):
     cleaned = str(text)
     # Remove HTML/XML-like tags
     cleaned = re.sub(r'<[^>]+>', '', cleaned)
-    # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ]
-    cleaned = re.sub(r'\[\s*\d+[a-zA-Z]?†?\s*\]', '', cleaned)
+    # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ], [†1-26]
+    cleaned = re.sub(r'\[\s*†?\s*\d+[\d\-a-zA-Z†]*\s*\]', '', cleaned)
     # Remove circled/annotative symbols (e.g., ⓐ ⓑ ... and similar enclosed alphanumerics)
     cleaned = re.sub(r'[\u2460-\u24FF]', '', cleaned)
     # Normalize whitespace
