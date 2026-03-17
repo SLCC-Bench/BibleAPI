@@ -54,16 +54,23 @@ def list_translations():
 def load_data(translation):
     # Load from JSON file in bible folder
     bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
-    # Try to find the file by matching translation name (case-insensitive, spaces allowed)
+
+    # Try to find the file by matching translation name/abbreviation/filename (case-insensitive)
     json_file = None
     for fname in os.listdir(bible_folder):
         if fname.lower().endswith('.json'):
+            fpath = os.path.join(bible_folder, fname)
             try:
-                with open(os.path.join(bible_folder, fname), 'r', encoding='utf-8') as f:
+                with open(fpath, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     t = data.get("translation", {})
-                    if t.get("name", "").lower() == translation.lower():
-                        json_file = os.path.join(bible_folder, fname)
+                    t_name = (t.get("name", "") or "").strip().lower()
+                    t_abbr = (t.get("abbreviation", "") or "").strip().lower()
+                    f_stem = os.path.splitext(fname)[0].strip().lower()
+                    q = (translation or "").strip().lower()
+
+                    if q in [t_name, t_abbr, f_stem]:
+                        json_file = fpath
                         break
             except Exception:
                 continue
@@ -76,46 +83,10 @@ def load_data(translation):
         translation_info = data.get("translation", {})
         verses = data.get("verses", [])
 
-    # Clean up verse text as in the original code
-    cleaned_rows = []
-    for v in verses:
-        verse_text = v.get("Verse", "")
-        # Remove <S> tags with Strong's numbers
-        verse_text = re.sub(r'<S>[\d\s,]+<\/S>', '', verse_text)
-        # Remove <n>...</n> tags and their contents
-        verse_text = re.sub(r'<n>.*?<\/n>', '', verse_text, flags=re.DOTALL)
-        # Remove <p ...> tags (including <p> and <p ...>)
-        verse_text = re.sub(r'<p[^>]*>', '', verse_text, flags=re.IGNORECASE)
-        verse_text = re.sub(r'</p>', '', verse_text, flags=re.IGNORECASE)
-        verse_text = re.sub(r'<p[^\s>]*?', '', verse_text, flags=re.IGNORECASE)
-        # Remove <pb/> tags
-        verse_text = re.sub(r'<pb\s*\/>', '', verse_text, flags=re.IGNORECASE)
-        # Remove <i> and </i> tags (including <i ...>)
-        verse_text = re.sub(r'</?i[^>]*>', '', verse_text, flags=re.IGNORECASE)
-        # Remove custom footnote tags like <f>[7†]</f>
-        verse_text = re.sub(r'<f>.*?<\/f>', '', verse_text, flags=re.IGNORECASE)
-        # Remove any remaining HTML tags
-        verse_text = re.sub(r'<[^>]+>', '', verse_text)
-        # Remove leftover raw footnote markers like [7], [8], [10a], [ 11 ]
-        verse_text = re.sub(r'\[\s*\d+[a-zA-Z]?†?\s*\]', '', verse_text)
-        # Remove unwanted symbols but keep punctuation and letters
-        verse_text = re.sub(r'[^\w\s.,;:\'\"!?()\-\–—\[\]{}<>\/]', '', verse_text)
-        # Collapse excess whitespace
-        verse_text = re.sub(r'\s{2,}', ' ', verse_text)
-        cleaned_rows.append({
-            "Translation": v.get("Translation", ""),
-            "Reference": v.get("Reference", ""),
-            "Verse": verse_text.strip()
-        })
-
+    # Return full verse objects directly from JSON file
     return Response(json.dumps({
-        "translation": {
-            "name": translation_info.get("name", ""),
-            "language": translation_info.get("language", ""),
-            "abbreviation": translation_info.get("abbreviation", ""),
-            "year": translation_info.get("year", "")
-        },
-        "verses": cleaned_rows
+        "translation": translation_info,
+        "verses": verses
     }, ensure_ascii=False), mimetype='application/json')
 
 @bible_bp.route('/static/db/bible.SQLite3', methods=['GET'])

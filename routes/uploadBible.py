@@ -13,6 +13,20 @@ def sanitize_filename(name):
     # Remove unsafe characters for filenames, but allow spaces
     return re.sub(r'[^a-zA-Z0-9_\- ]', '', name)
 
+def clean_verse_text(text):
+    if text is None:
+        return ""
+    cleaned = str(text)
+    # Remove HTML/XML-like tags
+    cleaned = re.sub(r'<[^>]+>', '', cleaned)
+    # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ]
+    cleaned = re.sub(r'\[\s*\d+[a-zA-Z]?†?\s*\]', '', cleaned)
+    # Remove circled/annotative symbols (e.g., ⓐ ⓑ ... and similar enclosed alphanumerics)
+    cleaned = re.sub(r'[\u2460-\u24FF]', '', cleaned)
+    # Normalize whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned
+
 @upload_bible_bp.route('/api/upload-bible', methods=['POST'])
 def upload_bible():
     if 'file' not in request.files or 'name' not in request.form:
@@ -127,7 +141,7 @@ def upload_bible():
                 "BookName": clean_book,
                 "ChapterNumber": chapter,
                 "VerseNumber": verse,
-                "Verse": text
+                "Verse": clean_verse_text(text)
             }
             story_title = story_titles.get((book_number, chapter, verse))
             if story_title:
