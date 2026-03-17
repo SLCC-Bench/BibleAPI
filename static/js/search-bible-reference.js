@@ -1,4 +1,75 @@
 (function () {
+    // Generic book names from Genesis to Revelation with sorting numbers 1-66
+    window.GENERIC_BOOKS_SORTING = [
+        { name: "Genesis", sortingNumber: 1 },
+        { name: "Exodus", sortingNumber: 2 },
+        { name: "Leviticus", sortingNumber: 3 },
+        { name: "Numbers", sortingNumber: 4 },
+        { name: "Deuteronomy", sortingNumber: 5 },
+        { name: "Joshua", sortingNumber: 6 },
+        { name: "Judges", sortingNumber: 7 },
+        { name: "Ruth", sortingNumber: 8 },
+        { name: "1 Samuel", sortingNumber: 9 },
+        { name: "2 Samuel", sortingNumber: 10 },
+        { name: "1 Kings", sortingNumber: 11 },
+        { name: "2 Kings", sortingNumber: 12 },
+        { name: "1 Chronicles", sortingNumber: 13 },
+        { name: "2 Chronicles", sortingNumber: 14 },
+        { name: "Ezra", sortingNumber: 15 },
+        { name: "Nehemiah", sortingNumber: 16 },
+        { name: "Esther", sortingNumber: 17 },
+        { name: "Job", sortingNumber: 18 },
+        { name: "Psalms", sortingNumber: 19 },
+        { name: "Proverbs", sortingNumber: 20 },
+        { name: "Ecclesiastes", sortingNumber: 21 },
+        { name: "Song of Solomon", sortingNumber: 22 },
+        { name: "Isaiah", sortingNumber: 23 },
+        { name: "Jeremiah", sortingNumber: 24 },
+        { name: "Lamentations", sortingNumber: 25 },
+        { name: "Ezekiel", sortingNumber: 26 },
+        { name: "Daniel", sortingNumber: 27 },
+        { name: "Hosea", sortingNumber: 28 },
+        { name: "Joel", sortingNumber: 29 },
+        { name: "Amos", sortingNumber: 30 },
+        { name: "Obadiah", sortingNumber: 31 },
+        { name: "Jonah", sortingNumber: 32 },
+        { name: "Micah", sortingNumber: 33 },
+        { name: "Nahum", sortingNumber: 34 },
+        { name: "Habakkuk", sortingNumber: 35 },
+        { name: "Zephaniah", sortingNumber: 36 },
+        { name: "Haggai", sortingNumber: 37 },
+        { name: "Zechariah", sortingNumber: 38 },
+        { name: "Malachi", sortingNumber: 39 },
+        { name: "Matthew", sortingNumber: 40 },
+        { name: "Mark", sortingNumber: 41 },
+        { name: "Luke", sortingNumber: 42 },
+        { name: "John", sortingNumber: 43 },
+        { name: "Acts", sortingNumber: 44 },
+        { name: "Romans", sortingNumber: 45 },
+        { name: "1 Corinthians", sortingNumber: 46 },
+        { name: "2 Corinthians", sortingNumber: 47 },
+        { name: "Galatians", sortingNumber: 48 },
+        { name: "Ephesians", sortingNumber: 49 },
+        { name: "Philippians", sortingNumber: 50 },
+        { name: "Colossians", sortingNumber: 51 },
+        { name: "1 Thessalonians", sortingNumber: 52 },
+        { name: "2 Thessalonians", sortingNumber: 53 },
+        { name: "1 Timothy", sortingNumber: 54 },
+        { name: "2 Timothy", sortingNumber: 55 },
+        { name: "Titus", sortingNumber: 56 },
+        { name: "Philemon", sortingNumber: 57 },
+        { name: "Hebrews", sortingNumber: 58 },
+        { name: "James", sortingNumber: 59 },
+        { name: "1 Peter", sortingNumber: 60 },
+        { name: "2 Peter", sortingNumber: 61 },
+        { name: "1 John", sortingNumber: 62 },
+        { name: "2 John", sortingNumber: 63 },
+        { name: "3 John", sortingNumber: 64 },
+        { name: "Jude", sortingNumber: 65 },
+        { name: "Revelation", sortingNumber: 66 }
+    ];
+})();
+(function () {
     // Add pointer cursor to editable spans for better UX
     const style = document.createElement('style');
     style.textContent = `
@@ -43,46 +114,30 @@
             const res = await fetch(url);
             const data = await res.json();
             window.lastApiBooks = Array.isArray(data.books) ? data.books : [];
-            // --- PATCH: Always produce array of strings ---
-            // Normalize API response to array of book names
-            let newBookSuggestions = [];
+            // Use GENERIC_BOOKS_SORTING for book names
+            let newBookSuggestions = window.GENERIC_BOOKS_SORTING.map(b => b.name);
             let newChapterSuggestions = [];
-            if (Array.isArray(data.books)) {
-                if (typeof data.books[0] === 'object') {
-                    newBookSuggestions = data.books.map(b => b.BookName || b.name || b.book || String(b));
-                    // Find selected book for chapter suggestions
-                    const selectedBook = bookSpan.textContent.trim() || newBookSuggestions[0];
-                    const bookObj = data.books.find(b => (b.BookName || b.name || b.book || String(b)) === selectedBook);
-                    if (bookObj && bookObj.chapters) {
-                        newChapterSuggestions = Object.keys(bookObj.chapters).map(ch => String(ch));
-                    }
-                } else {
-                    newBookSuggestions = data.books;
+            // Find selected book for chapter suggestions using API data
+            if (Array.isArray(data.books) && typeof data.books[0] === 'object') {
+                const selectedBook = bookSpan.textContent.trim() || newBookSuggestions[0];
+                // Try to match selectedBook to BookName or name in API
+                const bookObj = data.books.find(b => {
+                    const apiName = b.BookName || b.name || b.book || String(b);
+                    // Try to match with generic name (case-insensitive)
+                    return apiName && apiName.toLowerCase() === selectedBook.toLowerCase();
+                });
+                if (bookObj && bookObj.chapters) {
+                    newChapterSuggestions = Object.keys(bookObj.chapters).map(ch => String(ch));
                 }
-            } else if (Array.isArray(data)) {
-                if (typeof data[0] === 'object') {
-                    newBookSuggestions = data.map(b => b.BookName || b.name || b.book || String(b));
-                } else {
-                    newBookSuggestions = data;
-                }
-            } else if (typeof data === 'object' && data !== null) {
-                if (Array.isArray(data.bookNames)) {
-                    newBookSuggestions = data.bookNames;
-                } else if (data.books && typeof data.books === 'object') {
-                    newBookSuggestions = Object.values(data.books).map(b => typeof b === 'object' ? (b.BookName || b.name || b.book || String(b)) : b);
-                } else {
-                    newBookSuggestions = Object.values(data).map(b => typeof b === 'object' ? (b.BookName || b.name || b.book || String(b)) : b);
-                }
-            } else {
-                newBookSuggestions = [];
             }
-            // Remove falsy values and ensure all are strings
-            newBookSuggestions = newBookSuggestions.filter(Boolean).map(b => String(b));
             bookSuggestions = newBookSuggestions;
             chapterSuggestions = newChapterSuggestions;
             // When translation changes, update verseSuggestions for first book/chapter
             if (Array.isArray(window.lastApiBooks)) {
-                const bookObj = window.lastApiBooks.find(b => (b.BookName || b.name || b.book || String(b)) === (bookSuggestions[0] || "Genesis"));
+                const bookObj = window.lastApiBooks.find(b => {
+                    const apiName = b.BookName || b.name || b.book || String(b);
+                    return apiName && apiName.toLowerCase() === (bookSuggestions[0] || "Genesis").toLowerCase();
+                });
                 if (bookObj && bookObj.chapters) {
                     const firstChapter = Object.keys(bookObj.chapters)[0];
                     if (firstChapter && bookObj.chapters[firstChapter]) {
@@ -96,7 +151,6 @@
             } else {
                 verseSuggestions = [];
             }
-            // console.log('verseSuggestions:', verseSuggestions);
         } catch (err) {
             bookSuggestions = [];
             chapterSuggestions = [];
@@ -110,14 +164,14 @@
             selectSpan(bookSpan, 0, lastAcceptedBookSuggestion.length);
             return;
         }
-        // Find suggestion matching user input
-        const bookSuggestion = bookSuggestions.find(s =>
-            s.toLowerCase().startsWith(bookUserInput.toLowerCase())
+        // Find suggestion matching user input (using GENERIC_BOOKS_SORTING)
+        const bookSuggestion = window.GENERIC_BOOKS_SORTING.find(b =>
+            b.name.toLowerCase().startsWith(bookUserInput.toLowerCase())
         );
         if (bookSuggestion) {
-            bookSpan.textContent = bookSuggestion;
-            selectSpan(bookSpan, bookUserInput.length, bookSuggestion.length);
-            lastAcceptedBookSuggestion = bookSuggestion;
+            bookSpan.textContent = bookSuggestion.name;
+            selectSpan(bookSpan, bookUserInput.length, bookSuggestion.name.length);
+            lastAcceptedBookSuggestion = bookSuggestion.name;
             // When book changes, reset chapter and verse to 1:1
             const chapterSpan = document.getElementById("chapter");
             const verseSpan = document.getElementById("verse");
@@ -131,9 +185,26 @@
                 verseUserInput = "1";
                 lastAcceptedVerseSuggestion = "1";
             }
-            // Update chapter and verse suggestions when book changes
+            // Find and log the equivalent BookName from the API using sorting number
             if (Array.isArray(window.lastApiBooks)) {
-                const bookObj = window.lastApiBooks.find(b => (b.BookName || b.name || b.book || String(b)) === bookSuggestion);
+                // Find the sorting number for the selected generic book
+                const sortingNumber = bookSuggestion.sortingNumber;
+                // Find the API book with the same SortingNumber
+                const apiBook = window.lastApiBooks.find(b => {
+                    // Accept both string and number for SortingNumber
+                    const apiSorting = b.SortingNumber !== undefined ? Number(b.SortingNumber) : undefined;
+                    return apiSorting === sortingNumber;
+                });
+                if (apiBook) {
+                    console.log('[GENERIC→API] Generic:', bookSuggestion.name, '| API BookName:', apiBook.BookName || apiBook.name || apiBook.book || apiBook.Reference || apiBook);
+                } else {
+                    console.log('[GENERIC→API] Generic:', bookSuggestion.name, '| No matching API book found for SortingNumber:', sortingNumber);
+                }
+                // Try to match selected generic book name to BookName or name in API for chapter/verse suggestions
+                const bookObj = window.lastApiBooks.find(b => {
+                    const apiName = b.BookName || b.name || b.book || String(b);
+                    return apiName && apiName.toLowerCase() === bookSuggestion.name.toLowerCase();
+                });
                 if (bookObj && bookObj.chapters) {
                     chapterSuggestions = Object.keys(bookObj.chapters).map(ch => String(ch));
                     // Default to first chapter for verse suggestions
@@ -381,43 +452,19 @@ function renderVerse() {
 
     // When translation changes, fetch new suggestions and reset autofill
     function handleTranslationChange() {
+        // Save current book span value before fetching new suggestions
+        const currentBookValue = bookSpan.textContent.trim();
         fetchSuggestions().then(() => {
-            bookUserInput = "";
-            lastAcceptedBookSuggestion = bookSuggestions[0] || "Genesis";
-            renderBook();
-            // Update book suggestions display after translation selection
-            const bookSuggestionsList = document.getElementById('bookSuggestionsList');
-            if (bookSuggestionsList) {
-                bookSuggestionsList.innerHTML = '';
-                if (bookSuggestions.length) {
-                    // Group by Old and New Testament
-                    const oldTestament = bookSuggestions.slice(0, 39);
-                    const newTestament = bookSuggestions.slice(39);
-                    // Old Testament section
-                    const oldDiv = document.createElement('div');
-                    oldDiv.className = 'mb-2';
-                    oldDiv.innerHTML = '<span class="font-bold text-blue-700 block mb-1 sticky top-0 bg-white z-10">Old Testament</span>';
-                    for (const book of oldTestament) {
-                        const span = document.createElement('span');
-                        span.className = 'px-2 py-1 bg-gray-200 rounded block mb-1';
-                        span.textContent = book;
-                        oldDiv.appendChild(span);
-                    }
-                    // New Testament section
-                    const newDiv = document.createElement('div');
-                    newDiv.innerHTML = '<span class="font-bold text-green-700 block mb-1 sticky top-0 bg-white z-10">New Testament</span>';
-                    for (const book of newTestament) {
-                        const span = document.createElement('span');
-                        span.className = 'px-2 py-1 bg-gray-200 rounded block mb-1';
-                        span.textContent = book;
-                        newDiv.appendChild(span);
-                    }
-                    bookSuggestionsList.appendChild(oldDiv);
-                    bookSuggestionsList.appendChild(newDiv);
-                } else {
-                    bookSuggestionsList.innerHTML = '<span class="text-gray-400">No books found</span>';
-                }
+            // Try to retain the book value if it exists in new suggestions
+            if (bookSuggestions.includes(currentBookValue)) {
+                lastAcceptedBookSuggestion = currentBookValue;
+                bookUserInput = "";
+            } else {
+                // If not found, fallback to first suggestion
+                lastAcceptedBookSuggestion = bookSuggestions[0] || "Genesis";
+                bookUserInput = "";
             }
+            renderBook();
         });
     }
 
@@ -445,39 +492,7 @@ function renderVerse() {
         bookUserInput = "";
         lastAcceptedBookSuggestion = bookSuggestions[0] || "Genesis";
         renderBook();
-        // Update book suggestions display after initial load
-        const bookSuggestionsList = document.getElementById('bookSuggestionsList');
-        if (bookSuggestionsList) {
-            bookSuggestionsList.innerHTML = '';
-            if (bookSuggestions.length) {
-                // Group by Old and New Testament
-                const oldTestament = bookSuggestions.slice(0, 39);
-                const newTestament = bookSuggestions.slice(39);
-                // Old Testament section
-                const oldDiv = document.createElement('div');
-                oldDiv.className = 'mb-2';
-                oldDiv.innerHTML = '<span class="font-bold text-blue-700 block mb-1 sticky top-0 bg-white z-10">Old Testament</span>';
-                for (const book of oldTestament) {
-                    const span = document.createElement('span');
-                    span.className = 'px-2 py-1 bg-gray-200 rounded block mb-1';
-                    span.textContent = book;
-                    oldDiv.appendChild(span);
-                }
-                // New Testament section
-                const newDiv = document.createElement('div');
-                newDiv.innerHTML = '<span class="font-bold text-green-700 block mb-1 sticky top-0 bg-white z-10">New Testament</span>';
-                for (const book of newTestament) {
-                    const span = document.createElement('span');
-                    span.className = 'px-2 py-1 bg-gray-200 rounded block mb-1';
-                    span.textContent = book;
-                    newDiv.appendChild(span);
-                }
-                bookSuggestionsList.appendChild(oldDiv);
-                bookSuggestionsList.appendChild(newDiv);
-            } else {
-                bookSuggestionsList.innerHTML = '<span class="text-gray-400">No books found</span>';
-            }
-        }
+        // Removed: sidebar book suggestions logic
         // ...
     })();
 
@@ -507,9 +522,30 @@ function renderVerse() {
         let next = null;
         if (current.id === 'book') {
             next = document.getElementById('chapter');
-                // (Removed: Do not update bookSuggestionsList on Tab or arrow keys)
         } else if (current.id === 'chapter') {
             next = document.getElementById('verse');
+            // If navigating to verse, check if current verse is valid for the selected chapter
+            if (next) {
+                // Get current valid verse suggestions
+                let validVerses = [];
+                // Try to get from local variable first, fallback to global
+                if (typeof verseSuggestions !== 'undefined' && Array.isArray(verseSuggestions)) {
+                    validVerses = verseSuggestions;
+                } else if (Array.isArray(window.verseSuggestions)) {
+                    validVerses = window.verseSuggestions;
+                }
+                const currentVerse = next.textContent.trim();
+                if (!validVerses.includes(currentVerse)) {
+                    // If out of range, set to last valid verse
+                    const lastValid = validVerses.length > 0 ? validVerses[validVerses.length - 1] : "1";
+                    next.textContent = lastValid;
+                    if (typeof verseUserInput !== 'undefined') {
+                        verseUserInput = lastValid;
+                    }
+                    window.verseUserInput = lastValid;
+                    window.lastAcceptedVerseSuggestion = lastValid;
+                }
+            }
         } else if (current.id === 'verse') {
             next = document.getElementById('book');
         }

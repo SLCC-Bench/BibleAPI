@@ -20,13 +20,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const book = bookSpan.textContent.trim();
             const chapter = chapterSpan.textContent.trim();
             const verse = verseSpan.textContent.trim();
-            const ref = `${book} ${chapter}:${verse}`;
             if (!tableDiv._tabulator) return;
             const tabulator = tableDiv._tabulator;
             const allRows = tabulator.getRows();
             const allData = tabulator.getData();
-            const rowIndex = allData.findIndex(d => d.Reference === ref);
+
+            // --- Begin: Canonical to API book name mapping ---
+            // Find the SortingNumber for the canonical (UI) book name
+            let sortingNumber = null;
+            if (window.GENERIC_BOOKS_SORTING) {
+                const genericBook = window.GENERIC_BOOKS_SORTING.find(b => b.name.toLowerCase() === book.toLowerCase());
+                if (genericBook) sortingNumber = genericBook.sortingNumber;
+            }
+            // Find the API book name for this SortingNumber (from window.lastApiBooks)
+            let apiBookName = book;
+            if (window.lastApiBooks && sortingNumber != null) {
+                const apiBook = window.lastApiBooks.find(b => b.SortingNumber === sortingNumber);
+                if (apiBook && apiBook.BookName) apiBookName = apiBook.BookName;
+            }
+            // Compose the reference string as it appears in the API data
+            const ref = `${apiBookName} ${chapter}:${verse}`;
+            // --- End: Canonical to API book name mapping ---
+
             if (suppressReferenceObserver) return;
+            const rowIndex = allData.findIndex(d => d.Reference === ref);
             if (rowIndex >= 0) {
                 tabulator.deselectRow();
                 allRows[rowIndex].select();
@@ -98,22 +115,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Reference format: Book Chapter:Verse
                 const refMatch = rowData.Reference.match(/^([\w\s]+)\s+(\d+):(\d+)$/);
                 if (refMatch) {
+                    const apiBookName = refMatch[1];
+                    const chapter = refMatch[2];
+                    const verse = refMatch[3];
+                    let genericBookName = apiBookName;
+                    // Try to map API book name to canonical GENERIC_BOOKS_SORTING name using SortingNumber
+                    if (window.lastApiBooks && window.GENERIC_BOOKS_SORTING) {
+                        const apiBook = window.lastApiBooks.find(b => (b.BookName || b.name || b.book) === apiBookName);
+                        if (apiBook && apiBook.SortingNumber) {
+                            const genericBook = window.GENERIC_BOOKS_SORTING.find(gb => gb.sortingNumber === apiBook.SortingNumber);
+                            if (genericBook) genericBookName = genericBook.name;
+                        }
+                    }
                     const bookSpan = document.getElementById('book');
                     const chapterSpan = document.getElementById('chapter');
                     const verseSpan = document.getElementById('verse');
-                    if (bookSpan) bookSpan.textContent = refMatch[1];
-                    if (chapterSpan) chapterSpan.textContent = refMatch[2];
-                    if (verseSpan) verseSpan.textContent = refMatch[3];
+                    if (bookSpan) bookSpan.textContent = genericBookName;
+                    if (chapterSpan) chapterSpan.textContent = chapter;
+                    if (verseSpan) verseSpan.textContent = verse;
                 }
             }
 
             // Select and highlight the first row after table is fully built
             tabulator.on("tableBuilt", function() {
                 const rows = tabulator.getRows();
+                const bookSpan = document.getElementById('book');
+                const chapterSpan = document.getElementById('chapter');
+                const verseSpan = document.getElementById('verse');
+                const bookValue = bookSpan ? bookSpan.textContent.trim() : "";
+                const chapterValue = chapterSpan ? chapterSpan.textContent.trim() : "";
+                const verseValue = verseSpan ? verseSpan.textContent.trim() : "";
+                // Map canonical book name to API book name
+                let sortingNumber = null;
+                if (window.GENERIC_BOOKS_SORTING) {
+                    const genericBook = window.GENERIC_BOOKS_SORTING.find(b => b.name.toLowerCase() === bookValue.toLowerCase());
+                    if (genericBook) sortingNumber = genericBook.sortingNumber;
+                }
+                let apiBookName = bookValue;
+                if (window.lastApiBooks && sortingNumber != null) {
+                    const apiBook = window.lastApiBooks.find(b => b.SortingNumber === sortingNumber);
+                    if (apiBook && apiBook.BookName) apiBookName = apiBook.BookName;
+                }
+                const ref = `${apiBookName} ${chapterValue}:${verseValue}`;
+                // Find the row index for the current reference
+                const allData = tabulator.getData();
+                const rowIndex = allData.findIndex(d => d.Reference === ref);
                 if (rows.length > 0) {
                     tabulator.deselectRow();
-                    rows[0].select();
-                    updateReferenceSpans(rows[0].getData());
+                    // Focus the table before selecting the row
+                    tabulator.element.focus();
+                    if (rowIndex >= 0) {
+                        rows[rowIndex].select();
+                        // Scroll the selected row to the top of the table
+                        const tableHolder = tabulator.element.querySelector('.tabulator-tableholder');
+                        if (tableHolder) {
+                            const rowElem = rows[rowIndex].getElement();
+                            if (rowElem) {
+                                // Calculate offset to scroll row to top
+                                const holderRect = tableHolder.getBoundingClientRect();
+                                const rowRect = rowElem.getBoundingClientRect();
+                                const scrollTop = tableHolder.scrollTop + (rowRect.top - holderRect.top);
+                                tableHolder.scrollTop = scrollTop;
+                            }
+                        }
+                    }
                 }
             });
 
@@ -123,33 +188,25 @@ document.addEventListener('DOMContentLoaded', function() {
             tableDiv.tabIndex = 0; // Make div focusable
 
             tableDiv.addEventListener('keydown', function(e) {
-                // No debounce: process every ArrowUp/ArrowDown event immediately for max speed
-
+                // ...existing code...
                 // Handle navigation to referenceTextArea spans
                 if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                     e.preventDefault();
-                    // Determine which span to focus based on direction
-                    // Default: book > chapter > verse > book
                     const bookSpan = document.getElementById('book');
-                    const chapterSpan = document.getElementById('chapter');
                     const verseSpan = document.getElementById('verse');
                     let target = null;
                     if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowRight') {
-                        // Move to book span by default
                         target = bookSpan;
                     } else if ((e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowLeft') {
-                        // Move to verse span by default
                         target = verseSpan;
                     }
                     if (target) {
                         target.focus();
-                        setTimeout(() => {
-                            const sel = window.getSelection();
-                            const range = document.createRange();
-                            range.selectNodeContents(target);
-                            sel.removeAllRanges();
-                            sel.addRange(range);
-                        }, 0);
+                        const sel = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(target);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
                     }
                     return;
                 }
@@ -169,39 +226,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentRow.deselect();
                 nextRow.select();
 
-                requestAnimationFrame(() => {
-                    // Update reference spans to match selected row
-                    const rowData = nextRow.getData();
-                    if (rowData && rowData.Reference) {
-                        const refMatch = rowData.Reference.match(/^([\w\s]+)\s+(\d+):(\d+)$/);
-                        if (refMatch) {
-                            const bookSpan = document.getElementById('book');
-                            const chapterSpan = document.getElementById('chapter');
-                            const verseSpan = document.getElementById('verse');
-                            if (bookSpan) bookSpan.textContent = refMatch[1];
-                            if (chapterSpan) chapterSpan.textContent = refMatch[2];
-                            if (verseSpan) verseSpan.textContent = refMatch[3];
-                        }
-                    }
+                // Update reference spans to match selected row (use canonical book name)
+                updateReferenceSpans(nextRow.getData());
 
-                    // Only scroll if not fully visible
-                    const tableHolder = tableDiv.querySelector('.tabulator-tableholder');
-                    if (tableHolder) {
-                        const holderRect = tableHolder.getBoundingClientRect();
-                        const rowElem = nextRow.getElement();
-                        const rowRect = rowElem.getBoundingClientRect();
-                        if (rowRect.top < holderRect.top) {
-                            nextRow.scrollTo("top");
-                        } else if (rowRect.bottom > holderRect.bottom) {
-                            nextRow.scrollTo("bottom");
-                        }
+                // Only scroll if not fully visible
+                const tableHolder = tableDiv.querySelector('.tabulator-tableholder');
+                if (tableHolder) {
+                    const holderRect = tableHolder.getBoundingClientRect();
+                    const rowElem = nextRow.getElement();
+                    const rowRect = rowElem.getBoundingClientRect();
+                    if (rowRect.top < holderRect.top || rowRect.bottom > holderRect.bottom) {
+                        rowElem.scrollIntoView({ block: 'nearest', behavior: 'auto' });
                     }
+                }
 
-                    // Dispatch event for row selection (for UI sync)
-                    window.dispatchEvent(new CustomEvent('bible-rows-selected', {
-                        detail: { bibleData: [nextRow.getData()] }
-                    }));
-                });
+                // Dispatch event for row selection (for UI sync)
+                window.dispatchEvent(new CustomEvent('bible-rows-selected', {
+                    detail: { bibleData: [nextRow.getData()] }
+                }));
             });
 
             // Shift+Click range selection and update reference spans
@@ -233,10 +275,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 window._suppressScrollOnSelect = true;
                 suppressReferenceObserver = true;
                 updateReferenceSpans(clickedData);
-                setTimeout(() => {
-                    suppressReferenceObserver = false;
-                    window._suppressScrollOnSelect = false;
-                }, 0);
+                suppressReferenceObserver = false;
+                window._suppressScrollOnSelect = false;
                 // Do NOT scroll to top on row click
             });
         } catch (e) {
