@@ -125,6 +125,7 @@ def upload_bible():
         verses = []
         last_sorting_order = None
         sorting_number = 0
+        current_story_title = None
         for book_number, sorting_order, book, chapter, verse, text in verses_data:
             # Remove leading/trailing whitespace (including newlines) from book name
             clean_book = book.strip() if isinstance(book, str) else book
@@ -133,6 +134,10 @@ def upload_bible():
                 sorting_number += 1
                 last_sorting_order = book_number
             reference = f"{clean_book} {chapter}:{verse}"
+            # Update current story title if this verse starts a new story section
+            story_title = story_titles.get((book_number, chapter, verse))
+            if story_title:
+                current_story_title = story_title
             verse_entry = {
                 "Translation": bible_name,
                 "Reference": reference,
@@ -141,11 +146,9 @@ def upload_bible():
                 "BookName": clean_book,
                 "ChapterNumber": chapter,
                 "VerseNumber": verse,
-                "Verse": clean_verse_text(text)
+                "Verse": clean_verse_text(text),
+                "StoryTitle": current_story_title
             }
-            story_title = story_titles.get((book_number, chapter, verse))
-            if story_title:
-                verse_entry["StoryTitle"] = story_title
             verses.append(verse_entry)
 
         bible_json = {

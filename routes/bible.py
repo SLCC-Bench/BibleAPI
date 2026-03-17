@@ -50,6 +50,20 @@ def list_translations():
                     continue
     return Response(json.dumps({"translations": translations}, ensure_ascii=False), mimetype='application/json')
 
+def clean_verse_text_for_response(text):
+    if text is None:
+        return ""
+    cleaned = str(text)
+    # Remove HTML/XML-like tags
+    cleaned = re.sub(r'<[^>]+>', '', cleaned)
+    # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ]
+    cleaned = re.sub(r'\[\s*\d+[a-zA-Z]?†?\s*\]', '', cleaned)
+    # Remove circled/annotative symbols (e.g., ⓐ ⓑ ... and similar enclosed alphanumerics)
+    cleaned = re.sub(r'[\u2460-\u24FF]', '', cleaned)
+    # Normalize whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned
+
 @bible_bp.route('/api/verses/<translation>')
 def load_data(translation):
     # Load from JSON file in bible folder
@@ -82,6 +96,11 @@ def load_data(translation):
         data = json.load(f)
         translation_info = data.get("translation", {})
         verses = data.get("verses", [])
+
+    # Sanitize Verse text at read-time so old JSON files are also cleaned
+    for v in verses:
+        if isinstance(v, dict) and "Verse" in v:
+            v["Verse"] = clean_verse_text_for_response(v.get("Verse"))
 
     # Return full verse objects directly from JSON file
     return Response(json.dumps({
