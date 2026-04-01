@@ -10,13 +10,19 @@ from routes.bible import STANDARD_BOOKS
 upload_bible_bp = Blueprint('upload_bible', __name__)
 
 def sanitize_filename(name):
-    # Remove unsafe characters for filenames, but allow spaces
-    return re.sub(r'[^a-zA-Z0-9_\- ]', '', name)
+    # Keep Unicode letters/digits (covers Korean, Japanese, etc.), spaces, hyphens, underscores
+    cleaned = re.sub(r'[^\w\s\-]', '', name, flags=re.UNICODE).strip()
+    if not cleaned:
+        # Fallback: hex-encode the original name so it's always unique and safe
+        cleaned = name.encode('utf-8').hex()[:48]
+    return cleaned
 
 def clean_verse_text(text):
     if text is None:
         return ""
     cleaned = str(text)
+    # Remove Strong's concordance number tags (e.g. <S>7225</S>) before generic tag removal
+    cleaned = re.sub(r'<S>\d+</S>', '', cleaned)
     # Remove HTML/XML-like tags
     cleaned = re.sub(r'<[^>]+>', '', cleaned)
     # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ], [†1-26]
@@ -52,10 +58,10 @@ def upload_bible():
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM books")
         book_count = cursor.fetchone()[0]
-        if book_count not in (66, 27):
+        if book_count not in (66, 39, 27):
             conn.close()
             os.remove(upload_path)
-            return jsonify(success=False, error='Uploaded Bible must have exactly 66 books (full) or 27 books (New Testament).'), 400
+            return jsonify(success=False, error='Uploaded Bible must have exactly 66 books (full), 39 books (Old Testament), or 27 books (New Testament).'), 400
 
         # Gather translation info
         language = cursor.execute(

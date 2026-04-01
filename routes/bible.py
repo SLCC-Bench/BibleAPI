@@ -54,6 +54,8 @@ def clean_verse_text_for_response(text):
     if text is None:
         return ""
     cleaned = str(text)
+    # Remove Strong's concordance number tags (e.g. <S>7225</S>) before generic tag removal
+    cleaned = re.sub(r'<S>\d+</S>', '', cleaned)
     # Remove HTML/XML-like tags
     cleaned = re.sub(r'<[^>]+>', '', cleaned)
     # Remove bracketed footnote markers like [1], [2], [10a], [7†], [ 11 ]

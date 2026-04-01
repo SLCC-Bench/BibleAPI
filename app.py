@@ -7,6 +7,7 @@ from routes.password import password_bp
 from routes.uploadBible import upload_bible_bp
 from routes.updateBible import update_bible_bp
 from routes.webhook import webhook_bp
+from routes.languages import languages_bp
 import os
 
 app = Flask(__name__, static_folder="static")
@@ -20,6 +21,7 @@ app.register_blueprint(password_bp)
 app.register_blueprint(upload_bible_bp)
 app.register_blueprint(update_bible_bp)
 app.register_blueprint(webhook_bp)
+app.register_blueprint(languages_bp)
 
 @app.route("/", methods=["GET"])
 def index():

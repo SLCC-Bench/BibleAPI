@@ -2,22 +2,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Tab switching logic
     const tabUser = document.getElementById('tabUser');
     const tabBible = document.getElementById('tabBible');
+    const tabLanguage = document.getElementById('tabLanguage');
     const userSection = document.getElementById('userSection');
     const bibleSection = document.getElementById('bibleSection');
-    tabUser.onclick = function() {
-        tabUser.className = 'flex-1 py-3 text-lg font-semibold bg-blue-600 text-white hover:bg-blue-700 transition';
-        tabBible.className = 'flex-1 py-3 text-lg font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition';
-        userSection.style.display = '';
-        bibleSection.style.display = 'none';
-    };
-    tabBible.onclick = function() {
-        tabBible.className = 'flex-1 py-3 text-lg font-semibold bg-green-600 text-white hover:bg-green-700 transition';
-        tabUser.className = 'flex-1 py-3 text-lg font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition';
-        userSection.style.display = 'none';
-        bibleSection.style.display = '';
-    };
+    const languageSection = document.getElementById('languageSection');
+
+    function setActiveTab(active) {
+        const tabs = { user: tabUser, bible: tabBible, language: tabLanguage };
+        const sections = { user: userSection, bible: bibleSection, language: languageSection };
+        const activeColors = { user: 'bg-blue-600 text-white hover:bg-blue-700', bible: 'bg-green-600 text-white hover:bg-green-700', language: 'bg-purple-600 text-white hover:bg-purple-700' };
+        const inactiveColor = 'bg-blue-100 text-blue-700 hover:bg-blue-200';
+        Object.keys(tabs).forEach(key => {
+            tabs[key].className = `flex-1 py-3 text-lg font-semibold transition ${key === active ? activeColors[key] : inactiveColor}`;
+            sections[key].style.display = key === active ? '' : 'none';
+        });
+    }
+
+    tabUser.onclick = () => setActiveTab('user');
+    tabBible.onclick = () => setActiveTab('bible');
+    tabLanguage.onclick = () => { setActiveTab('language'); fetchLanguages(); };
+
     // Default to User tab
-    tabUser.click();
+    setActiveTab('user');
     // Toast function
     function showToast(message, type = 'info', duration = 3000) {
         const toast = document.createElement('div');
@@ -208,59 +214,110 @@ document.addEventListener('DOMContentLoaded', function() {
             hideLoading();
         });
     };
-    // Bible DB Upload JS
-    const bibleUploadForm = document.getElementById('bibleUploadForm');
-    const bibleFile = document.getElementById('bibleFile');
-    const bibleName = document.getElementById('bibleName');
-    const uploadMsg = document.getElementById('uploadMsg');
-    bibleUploadForm.onsubmit = function(e) {
+    // Bible Upload/Edit Modal JS
+    let bibleFormMode = 'upload'; // 'upload' or 'edit'
+
+    function openBibleModal(mode, bible) {
+        bibleFormMode = mode;
+        const modal = document.getElementById('bibleFormModal');
+        const title = document.getElementById('bibleModalTitle');
+        const submitBtn = document.getElementById('bibleModalSubmitBtn');
+        const fileLabel = document.getElementById('bibleModalFileLabel');
+        const fileInput = document.getElementById('bibleModalFile');
+
+        document.getElementById('bibleModalForm').reset();
+        document.getElementById('bibleModalOldName').value = '';
+
+        if (mode === 'upload') {
+            title.textContent = 'Upload Bible';
+            submitBtn.textContent = 'Upload';
+            fileLabel.innerHTML = 'Attach Bible <span class="text-red-500">*</span>';
+            fileInput.required = true;
+        } else {
+            title.textContent = 'Edit Bible';
+            submitBtn.textContent = 'Save';
+            fileLabel.innerHTML = 'Attach Bible <span class="text-gray-400 font-normal">(optional)</span>';
+            fileInput.required = false;
+            if (bible) {
+                document.getElementById('bibleModalOldName').value = bible.name;
+                document.getElementById('bibleModalName').value = bible.name;
+                document.getElementById('bibleModalAbbr').value = bible.abbreviation || '';
+                document.getElementById('bibleModalYear').value = bible.year || '';
+            }
+        }
+
+        modal.style.display = '';
+    }
+
+    function closeBibleModal() {
+        document.getElementById('bibleFormModal').style.display = 'none';
+    }
+
+    document.getElementById('uploadBibleBtn').onclick = function() {
+        openBibleModal('upload');
+    };
+    document.getElementById('closeBibleModal').onclick = closeBibleModal;
+    document.getElementById('cancelBibleModal').onclick = closeBibleModal;
+
+    document.getElementById('bibleModalForm').onsubmit = function(e) {
         e.preventDefault();
         showLoading();
-        uploadMsg.textContent = '';
-        const file = bibleFile.files[0];
-        const name = bibleName.value.trim();
-        const abbr = document.getElementById('bibleAbbr').value.trim();
-        const year = document.getElementById('bibleYear').value.trim();
-        if (!file || !name) {
-            showToast('Please provide a Bible name and select a file.', 'error');
+        const name = document.getElementById('bibleModalName').value.trim();
+        const abbr = document.getElementById('bibleModalAbbr').value.trim();
+        const year = document.getElementById('bibleModalYear').value.trim();
+        const file = document.getElementById('bibleModalFile').files[0];
+
+        if (!name) {
+            showToast('Bible name is required.', 'error');
             hideLoading();
             return;
         }
+
         const formData = new FormData();
-        formData.append('file', file);
         formData.append('name', name);
         formData.append('abbreviation', abbr);
         formData.append('year', year);
-        fetch('/api/upload-bible', {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => {
-            hideLoading();
-            if (!res.ok) {
-                showToast('Server error: ' + res.status, 'error');
-                return Promise.reject();
+        if (file) formData.append('file', file);
+
+        if (bibleFormMode === 'upload') {
+            if (!file) {
+                showToast('Please attach a Bible file.', 'error');
+                hideLoading();
+                return;
             }
-            return res.json();
-        })
-        .then(result => {
-            if (result && result.success) {
-                showToast('Upload successful!', 'success');
-                bibleFile.value = '';
-                bibleName.value = '';
-                document.getElementById('bibleAbbr').value = '';
-                document.getElementById('bibleYear').value = '';
-                setTimeout(fetchBibles, 300); // Delay to allow spinner to hide
-            } else if (result) {
-                showToast(result.error || 'Upload failed.', 'error');
-            }
-        })
-        .catch(() => {
-            hideLoading();
-        })
-        .finally(() => {
-            // hideLoading(); // Already called above
-        });
+            fetch('/api/upload-bible', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(result => {
+                    if (result && result.success) {
+                        showToast('Upload successful!', 'success');
+                        closeBibleModal();
+                        fetchBibles();
+                    } else {
+                        showToast((result && result.error) || 'Upload failed.', 'error');
+                    }
+                })
+                .catch(() => showToast('Upload error.', 'error'))
+                .finally(() => hideLoading());
+        } else {
+            const oldName = document.getElementById('bibleModalOldName').value;
+            formData.append('old_name', oldName);
+            formData.append('new_name', name);
+            formData.append('new_abbreviation', abbr);
+            formData.append('new_year', year);
+            fetch('/api/update-bible', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(result => {
+                    if (result && result.success) {
+                        showToast('Bible updated!', 'success');
+                        closeBibleModal();
+                        fetchBibles();
+                    } else {
+                        showToast((result && result.error) || 'Update failed.', 'error');
+                    }
+                })
+                .catch(() => showToast('Update error.', 'error'))
+                .finally(() => hideLoading());
+        }
     };
     // Bible List and Rename JS
     let bibleList = [];
@@ -281,70 +338,221 @@ document.addEventListener('DOMContentLoaded', function() {
                 hideLoading();
             });
     }
-    function renderBibleTable() {
-        const search = document.getElementById('bibleSearch').value.trim().toLowerCase();
-        let filtered = bibleList.filter(bible =>
-            bible.name.toLowerCase().includes(search) ||
-            (bible.abbreviation || '').toLowerCase().includes(search) ||
-            (bible.language || '').toLowerCase().includes(search) ||
-            (bible.year || '').toLowerCase().includes(search)
+    let LANGUAGE_NAMES = {};
+
+    function resolveLanguageName(code) {
+        if (!code) return 'Unknown';
+        const lower = code.trim().toLowerCase();
+        return LANGUAGE_NAMES[lower] || code.trim();
+    }
+
+    // Language Management
+    let languageList = [];
+
+    function fetchLanguages() {
+        showLoading();
+        fetch('/api/languages')
+            .then(res => res.json())
+            .then(data => {
+                LANGUAGE_NAMES = data;
+                languageList = Object.entries(data).map(([code, name]) => ({ code, name }));
+                renderLanguageTable();
+            })
+            .catch(() => {})
+            .finally(() => hideLoading());
+    }
+
+    function renderLanguageTable() {
+        const search = document.getElementById('languageSearch').value.trim().toLowerCase();
+        const filtered = languageList.filter(l =>
+            l.code.toLowerCase().includes(search) ||
+            l.name.toLowerCase().includes(search)
         );
-        filtered.sort((a, b) => {
-            let valA = (a[bibleSortKey] || '').toLowerCase();
-            let valB = (b[bibleSortKey] || '').toLowerCase();
-            if (valA < valB) return bibleSortAsc ? -1 : 1;
-            if (valA > valB) return bibleSortAsc ? 1 : -1;
-            return 0;
-        });
-        const tbody = document.getElementById('biblesTbody');
+        const tbody = document.getElementById('languagesTbody');
         tbody.innerHTML = '';
-        filtered.forEach(bible => {
+        filtered.forEach(l => {
             const tr = document.createElement('tr');
-            tr.className = 'hover:bg-green-50 transition';
+            tr.className = 'hover:bg-purple-50 transition';
             tr.innerHTML = `
-                <td class="px-3 py-2">${bible.name}</td>
-                <td class="px-3 py-2">${bible.abbreviation || ''}</td>
-                <td class="px-3 py-2">${bible.language || ''}</td>
-                <td class="px-3 py-2">${bible.year || ''}</td>
-                <td class="px-3 py-2 flex gap-2">
-                    <button class="text-blue-700 hover:underline" onclick="openBibleViewer('${bible.name.replace(/'/g, "\\'")}')">View</button>
-                    <button class="text-green-700 hover:underline" onclick="showRenameBible('${bible.name.replace(/'/g, "\\'")}', '${bible.abbreviation ? bible.abbreviation.replace(/'/g, "\\'") : ''}')">Edit</button>
-                    <button class="text-red-700 hover:underline" onclick="showDeleteBible('${bible.name.replace(/'/g, "\\'")}')">Delete</button>
+                <td class="px-4 py-2 font-mono text-purple-800">${l.code}</td>
+                <td class="px-4 py-2">${l.name}</td>
+                <td class="px-4 py-2 flex gap-3">
+                    <button class="text-purple-700 hover:underline text-sm" onclick="showEditLanguage('${l.code.replace(/'/g, "\\'")}', '${l.name.replace(/'/g, "\\'")}')">Edit</button>
+                    <button class="text-red-700 hover:underline text-sm" onclick="showDeleteLanguage('${l.code.replace(/'/g, "\\'")}', '${l.name.replace(/'/g, "\\'")}')">Delete</button>
                 </td>
             `;
             tbody.appendChild(tr);
         });
     }
+
+    document.getElementById('languageSearch').addEventListener('input', renderLanguageTable);
+
+    function openLanguageModal(mode, code, name) {
+        document.getElementById('languageModalForm').reset();
+        document.getElementById('languageModalOldCode').value = '';
+        const codeInput = document.getElementById('languageModalCode');
+        if (mode === 'edit') {
+            document.getElementById('languageModalTitle').textContent = 'Edit Language';
+            document.getElementById('languageModalSubmitBtn').textContent = 'Save';
+            document.getElementById('languageModalOldCode').value = code;
+            codeInput.value = code;
+            codeInput.readOnly = true;
+            codeInput.classList.add('bg-gray-100');
+            document.getElementById('languageModalName').value = name;
+        } else {
+            document.getElementById('languageModalTitle').textContent = 'Add Language';
+            document.getElementById('languageModalSubmitBtn').textContent = 'Add';
+            codeInput.readOnly = false;
+            codeInput.classList.remove('bg-gray-100');
+        }
+        document.getElementById('languageFormModal').style.display = '';
+    }
+
+    function closeLanguageModal() {
+        document.getElementById('languageFormModal').style.display = 'none';
+    }
+
+    document.getElementById('addLanguageBtn').onclick = () => openLanguageModal('add');
+    document.getElementById('closeLanguageModal').onclick = closeLanguageModal;
+    document.getElementById('cancelLanguageModal').onclick = closeLanguageModal;
+
+    window.showEditLanguage = function(code, name) {
+        openLanguageModal('edit', code, name);
+    };
+
+    window.showDeleteLanguage = function(code, name) {
+        document.getElementById('deleteLanguageName').textContent = `${name} (${code})`;
+        document.getElementById('confirmDeleteLanguage').setAttribute('data-code', code);
+        document.getElementById('deleteLanguageModal').style.display = '';
+    };
+
+    document.getElementById('cancelDeleteLanguage').onclick = function() {
+        document.getElementById('deleteLanguageModal').style.display = 'none';
+    };
+
+    document.getElementById('confirmDeleteLanguage').onclick = function() {
+        const code = this.getAttribute('data-code');
+        showLoading();
+        fetch(`/api/languages/${encodeURIComponent(code)}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    showToast('Language deleted.', 'success');
+                    document.getElementById('deleteLanguageModal').style.display = 'none';
+                    fetchLanguages();
+                } else {
+                    showToast(result.error || 'Delete failed.', 'error');
+                }
+            })
+            .catch(() => showToast('Delete error.', 'error'))
+            .finally(() => hideLoading());
+    };
+
+    document.getElementById('languageModalForm').onsubmit = function(e) {
+        e.preventDefault();
+        const code = document.getElementById('languageModalCode').value.trim().toLowerCase();
+        const name = document.getElementById('languageModalName').value.trim();
+        if (!code || !name) {
+            showToast('Code and name are required.', 'error');
+            return;
+        }
+        showLoading();
+        fetch('/api/languages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, name })
+        })
+        .then(res => res.json())
+        .then(result => {
+            if (result.success) {
+                showToast('Language saved.', 'success');
+                closeLanguageModal();
+                fetchLanguages();
+            } else {
+                showToast(result.error || 'Save failed.', 'error');
+            }
+        })
+        .catch(() => showToast('Save error.', 'error'))
+        .finally(() => hideLoading());
+    };
+
+    function renderBibleTable() {
+        const search = document.getElementById('bibleSearch').value.trim().toLowerCase();
+        let filtered = bibleList.filter(bible =>
+            bible.name.toLowerCase().includes(search) ||
+            (bible.abbreviation || '').toLowerCase().includes(search) ||
+            resolveLanguageName(bible.language).toLowerCase().includes(search) ||
+            (bible.language || '').toLowerCase().includes(search) ||
+            (bible.year || '').toLowerCase().includes(search)
+        );
+
+        // Group by resolved language name
+        const groups = {};
+        filtered.forEach(bible => {
+            const lang = resolveLanguageName(bible.language);
+            if (!groups[lang]) groups[lang] = [];
+            groups[lang].push(bible);
+        });
+
+        // Sort language group keys
+        const sortedLangs = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+        // Sort bibles within each group
+        sortedLangs.forEach(lang => {
+            groups[lang].sort((a, b) => {
+                let valA = (a[bibleSortKey] || '').toLowerCase();
+                let valB = (b[bibleSortKey] || '').toLowerCase();
+                if (valA < valB) return bibleSortAsc ? -1 : 1;
+                if (valA > valB) return bibleSortAsc ? 1 : -1;
+                return 0;
+            });
+        });
+
+        const tbody = document.getElementById('biblesTbody');
+        tbody.innerHTML = '';
+
+        sortedLangs.forEach(lang => {
+            // Language group header row
+            const groupRow = document.createElement('tr');
+            groupRow.innerHTML = `<td colspan="4" class="px-4 py-2 bg-green-200 text-green-900 font-bold text-xs uppercase tracking-wider">${lang}</td>`;
+            tbody.appendChild(groupRow);
+
+            groups[lang].forEach(bible => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-green-50 transition';
+                tr.innerHTML = `
+                    <td class="px-4 py-2">${bible.name}</td>
+                    <td class="px-4 py-2">${bible.abbreviation || ''}</td>
+                    <td class="px-4 py-2">${bible.year || ''}</td>
+                    <td class="px-4 py-2 flex gap-3">
+                        <button class="text-blue-700 hover:underline text-sm" onclick="openBibleViewer('${bible.name.replace(/'/g, "\\'")}')">View</button>
+                        <button class="text-green-700 hover:underline text-sm" onclick="showRenameBible('${bible.name.replace(/'/g, "\\'")}')">Edit</button>
+                        <button class="text-red-700 hover:underline text-sm" onclick="showDeleteBible('${bible.name.replace(/'/g, "\\'")}')">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+    }
     document.getElementById('bibleSearch').addEventListener('input', renderBibleTable);
     document.getElementById('sortBibleName').onclick = function() {
-        bibleSortKey = 'name';
-        bibleSortAsc = bibleSortKey === 'name' ? !bibleSortAsc : true;
+        if (bibleSortKey === 'name') bibleSortAsc = !bibleSortAsc;
+        else { bibleSortKey = 'name'; bibleSortAsc = true; }
         renderBibleTable();
     };
     document.getElementById('sortBibleAbbr').onclick = function() {
-        bibleSortKey = 'abbreviation';
-        bibleSortAsc = bibleSortKey === 'abbreviation' ? !bibleSortAsc : true;
-        renderBibleTable();
-    };
-    document.getElementById('sortBibleLang').onclick = function() {
-        bibleSortKey = 'language';
-        bibleSortAsc = bibleSortKey === 'language' ? !bibleSortAsc : true;
+        if (bibleSortKey === 'abbreviation') bibleSortAsc = !bibleSortAsc;
+        else { bibleSortKey = 'abbreviation'; bibleSortAsc = true; }
         renderBibleTable();
     };
     document.getElementById('sortBibleYear').onclick = function() {
-        bibleSortKey = 'year';
-        bibleSortAsc = bibleSortKey === 'year' ? !bibleSortAsc : true;
+        if (bibleSortKey === 'year') bibleSortAsc = !bibleSortAsc;
+        else { bibleSortKey = 'year'; bibleSortAsc = true; }
         renderBibleTable();
     };
-    window.showRenameBible = function(name, abbr) {
+    window.showRenameBible = function(name) {
         const bible = bibleList.find(b => b.name === name);
-        document.getElementById('bibleRenameForm').style.display = '';
-        document.getElementById('editBibleName').value = name;
-        document.getElementById('editBibleOldName').value = name;
-        document.getElementById('editBibleAbbr').value = abbr || '';
-        document.getElementById('editBibleYear').value = bible && bible.year ? bible.year : '';
-        document.getElementById('editBibleFile').value = '';
-        document.getElementById('renameMsg').textContent = '';
+        openBibleModal('edit', bible || { name });
     };
     window.showDeleteBible = function(name) {
         document.getElementById('deleteBibleModal').style.display = '';
@@ -438,53 +646,12 @@ document.addEventListener('DOMContentLoaded', function() {
             hideLoading();
         });
     };
-    document.getElementById('cancelEditBible').onclick = function() {
-        document.getElementById('bibleRenameForm').style.display = 'none';
-        document.getElementById('renameMsg').textContent = '';
-    };
-    document.getElementById('bibleRenameForm').onsubmit = function(e) {
-        e.preventDefault();
-        showLoading();
-        const oldName = document.getElementById('editBibleOldName').value;
-        const newName = document.getElementById('editBibleName').value.trim();
-        const newAbbr = document.getElementById('editBibleAbbr').value.trim();
-        const newYear = document.getElementById('editBibleYear').value.trim();
-        const fileInput = document.getElementById('editBibleFile');
-        const file = fileInput.files[0];
-        if (!newName) {
-            showToast('Bible name cannot be empty.', 'error');
-            hideLoading();
-            return;
-        }
-        const formData = new FormData();
-        formData.append('old_name', oldName);
-        formData.append('new_name', newName);
-        formData.append('new_abbreviation', newAbbr);
-        formData.append('new_year', newYear);
-        if (file) formData.append('file', file);
-        fetch('/api/update-bible', {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => res.json())
-        .then(result => {
-            if (result.success) {
-                showToast('Bible updated!', 'success');
-                document.getElementById('bibleRenameForm').style.display = 'none';
-                fetchBibles();
-            } else {
-                showToast(result.error || 'Update failed.', 'error');
-            }
-        })
-        .catch(() => {
-            hideLoading();
-        })
-        .finally(() => {
-            hideLoading();
-        });
-    };
     fetchUsers();
-    fetchBibles();
+    // Load languages first so Bible table grouping resolves codes correctly
+    fetch('/api/languages')
+        .then(res => res.json())
+        .then(data => { LANGUAGE_NAMES = data; })
+        .finally(() => fetchBibles());
 
 
     // Bible Viewer Modal logic
