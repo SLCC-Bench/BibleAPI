@@ -8,9 +8,16 @@ from routes.uploadBible import upload_bible_bp
 from routes.updateBible import update_bible_bp
 from routes.webhook import webhook_bp
 from routes.languages import languages_bp
+from db import init_db
 import os
 
 app = Flask(__name__, static_folder="static")
+
+try:
+    init_db()
+    print("MySQL tables initialized.")
+except Exception as e:
+    print(f"WARNING: Could not initialize MySQL tables: {e}")
 
 # Register blueprints without url_prefix
 app.register_blueprint(users_bp)

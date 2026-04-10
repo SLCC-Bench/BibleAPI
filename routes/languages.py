@@ -1,25 +1,24 @@
 from flask import Blueprint, request, jsonify
-import os
-import json
+
+from db import get_db_connection
 
 languages_bp = Blueprint('languages', __name__)
 
-LANGUAGES_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'languages.json')
-
-def load_languages():
-    with open(LANGUAGES_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-def save_languages(data):
-    with open(LANGUAGES_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 @languages_bp.route('/api/languages', methods=['GET'])
 def get_languages():
+    conn = get_db_connection()
     try:
-        return jsonify(load_languages())
+        with conn.cursor() as cur:
+            cur.execute("SELECT code, name FROM languages ORDER BY code")
+            rows = cur.fetchall()
     except Exception as e:
         return jsonify(error=str(e)), 500
+    finally:
+        conn.close()
+
+    return jsonify({r["code"]: r["name"] for r in rows})
+
 
 @languages_bp.route('/api/languages', methods=['POST'])
 def upsert_language():
@@ -28,25 +27,38 @@ def upsert_language():
     name = (data.get('name') or '').strip()
     if not code or not name:
         return jsonify(success=False, error='Code and name are required.'), 400
+
+    conn = get_db_connection()
     try:
-        languages = load_languages()
-        languages[code] = name
-        # Keep sorted by code
-        languages = dict(sorted(languages.items()))
-        save_languages(languages)
-        return jsonify(success=True, code=code, name=name)
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO languages (code, name)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE name = VALUES(name)
+            """, (code, name))
+        conn.commit()
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+    finally:
+        conn.close()
+
+    return jsonify(success=True, code=code, name=name)
+
 
 @languages_bp.route('/api/languages/<code>', methods=['DELETE'])
 def delete_language(code):
     code = code.strip().lower()
+    conn = get_db_connection()
     try:
-        languages = load_languages()
-        if code not in languages:
-            return jsonify(success=False, error=f"Language code '{code}' not found."), 404
-        del languages[code]
-        save_languages(languages)
-        return jsonify(success=True)
+        with conn.cursor() as cur:
+            cur.execute("SELECT code FROM languages WHERE code = %s", (code,))
+            if not cur.fetchone():
+                return jsonify(success=False, error=f"Language code '{code}' not found."), 404
+            cur.execute("DELETE FROM languages WHERE code = %s", (code,))
+        conn.commit()
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+    finally:
+        conn.close()
+
+    return jsonify(success=True)

@@ -1,20 +1,14 @@
 from flask import Blueprint, request, jsonify
 import os
 import re
-import json
 import sqlite3
 import tempfile
 
 from routes.uploadBible import clean_verse_text
+from db import get_db_connection
 
 update_bible_bp = Blueprint('update_bible', __name__)
 
-def sanitize_filename(name):
-    # Keep Unicode letters/digits (covers Korean, Japanese, etc.), spaces, hyphens, underscores
-    cleaned = re.sub(r'[^\w\s\-]', '', name, flags=re.UNICODE).strip()
-    if not cleaned:
-        cleaned = name.encode('utf-8').hex()[:48]
-    return cleaned
 
 @update_bible_bp.route('/api/update-bible', methods=['POST'])
 def update_bible():
@@ -27,14 +21,16 @@ def update_bible():
     if not old_name or not new_name:
         return jsonify(success=False, error='Old name and new name are required.'), 400
 
-    bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
-    old_filename = sanitize_filename(old_name) + ".json"
-    old_json_path = os.path.join(bible_folder, old_filename)
-    new_filename = sanitize_filename(new_name) + ".json"
-    new_json_path = os.path.join(bible_folder, new_filename)
-
-    if not os.path.exists(old_json_path):
-        return jsonify(success=False, error=f"Bible '{old_name}' JSON not found."), 404
+    conn_mysql = get_db_connection()
+    try:
+        with conn_mysql.cursor() as cur:
+            cur.execute("SELECT id FROM translations WHERE name = %s", (old_name,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error=f"Translation '{old_name}' not found."), 404
+            translation_id = row["id"]
+    finally:
+        conn_mysql.close()
 
     upload_path = None
     try:
@@ -45,22 +41,28 @@ def update_bible():
             upload_path = os.path.join(tempfile.gettempdir(), file.filename)
             file.save(upload_path)
 
-            conn = sqlite3.connect(upload_path)
-            cursor = conn.cursor()
+            conn_sqlite = sqlite3.connect(upload_path)
+            cursor = conn_sqlite.cursor()
 
             cursor.execute("SELECT COUNT(*) FROM books")
             book_count = cursor.fetchone()[0]
             if book_count not in (66, 39, 27):
-                conn.close()
-                raise ValueError('Uploaded Bible must have exactly 66 books (full), 39 books (Old Testament), or 27 books (New Testament).')
+                conn_sqlite.close()
+                raise ValueError('Uploaded Bible must have exactly 66, 39, or 27 books.')
 
-            language = cursor.execute("SELECT value FROM info WHERE name='language' LIMIT 1").fetchone()
+            language = cursor.execute(
+                "SELECT value FROM info WHERE name='language' LIMIT 1"
+            ).fetchone()
             language = language[0] if language else None
 
-            src_abbr = cursor.execute("SELECT value FROM info WHERE name='abbreviation' LIMIT 1").fetchone()
+            src_abbr = cursor.execute(
+                "SELECT value FROM info WHERE name='abbreviation' LIMIT 1"
+            ).fetchone()
             src_abbr = src_abbr[0] if src_abbr else new_abbr
 
-            src_year = cursor.execute("SELECT value FROM info WHERE name='year' LIMIT 1").fetchone()
+            src_year = cursor.execute(
+                "SELECT value FROM info WHERE name='year' LIMIT 1"
+            ).fetchone()
             src_year = src_year[0] if src_year else new_year
 
             cursor.execute("PRAGMA table_info(books)")
@@ -68,19 +70,21 @@ def update_bible():
 
             if 'sorting_order' in columns:
                 verses_data = cursor.execute(
-                    "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number"
+                    "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text "
+                    "FROM verses v JOIN books b ON v.book_number = b.book_number"
                 ).fetchall()
             else:
                 verses_data = cursor.execute(
-                    "SELECT b.book_number, b.book_number as sorting_order, b.long_name, v.chapter, v.verse, v.text FROM verses v JOIN books b ON v.book_number = b.book_number"
+                    "SELECT b.book_number, b.book_number as sorting_order, b.long_name, v.chapter, v.verse, v.text "
+                    "FROM verses v JOIN books b ON v.book_number = b.book_number"
                 ).fetchall()
 
             verses_data = sorted(
                 verses_data,
                 key=lambda row: (
                     int(row[0]),
-                    int(row[3]) if not isinstance(row[3], int) and str(row[3]).isdigit() else row[3],
-                    int(row[4]) if not isinstance(row[4], int) and str(row[4]).isdigit() else row[4]
+                    int(row[3]) if str(row[3]).isdigit() else row[3],
+                    int(row[4]) if str(row[4]).isdigit() else row[4]
                 )
             )
 
@@ -92,21 +96,16 @@ def update_bible():
             except Exception:
                 pass
 
-            conn.close()
+            conn_sqlite.close()
             os.remove(upload_path)
             upload_path = None
 
-            translation_info = {
-                "name": new_name,
-                "language": language,
-                "abbreviation": new_abbr if new_abbr else src_abbr,
-                "year": new_year if new_year else src_year
-            }
-
-            verses = []
+            # Build verse records
+            verse_records = []
             last_book_number = None
             sorting_number = 0
             current_story_title = None
+
             for book_number, sorting_order, book, chapter, verse, text in verses_data:
                 clean_book = book.strip() if isinstance(book, str) else book
                 if book_number != last_book_number:
@@ -115,41 +114,74 @@ def update_bible():
                 story_title = story_titles.get((book_number, chapter, verse))
                 if story_title:
                     current_story_title = story_title
-                verses.append({
-                    "Translation": new_name,
-                    "Reference": f"{clean_book} {chapter}:{verse}",
-                    "BookNameSortingOrder": book_number,
-                    "SortingNumber": sorting_number,
-                    "BookName": clean_book,
-                    "ChapterNumber": chapter,
-                    "VerseNumber": verse,
-                    "Verse": clean_verse_text(text),
-                    "StoryTitle": current_story_title
-                })
+                verse_records.append((
+                    translation_id,
+                    clean_book,
+                    book_number,
+                    sorting_number,
+                    chapter,
+                    verse,
+                    clean_verse_text(text),
+                    current_story_title
+                ))
 
-            bible_json = {"translation": translation_info, "verses": verses}
+            conn_mysql = get_db_connection()
+            try:
+                with conn_mysql.cursor() as cur:
+                    # Update translation metadata
+                    cur.execute("""
+                        UPDATE translations
+                        SET name = %s,
+                            language = %s,
+                            abbreviation = %s,
+                            year = %s
+                        WHERE id = %s
+                    """, (
+                        new_name,
+                        language,
+                        new_abbr if new_abbr else src_abbr,
+                        new_year if new_year else src_year,
+                        translation_id
+                    ))
+
+                    # Replace all verses
+                    cur.execute("DELETE FROM verses WHERE translation_id = %s", (translation_id,))
+
+                    chunk_size = 1000
+                    for i in range(0, len(verse_records), chunk_size):
+                        cur.executemany("""
+                            INSERT INTO verses
+                                (translation_id, book_name, book_number, sorting_number, chapter, verse_number, text, story_title)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """, verse_records[i:i + chunk_size])
+
+                conn_mysql.commit()
+            finally:
+                conn_mysql.close()
 
         else:
-            with open(old_json_path, 'r', encoding='utf-8') as f:
-                bible_json = json.load(f)
+            # Metadata-only update (no new file)
+            conn_mysql = get_db_connection()
+            try:
+                with conn_mysql.cursor() as cur:
+                    fields = ["name = %s"]
+                    values = [new_name]
+                    if new_abbr:
+                        fields.append("abbreviation = %s")
+                        values.append(new_abbr)
+                    if new_year:
+                        fields.append("year = %s")
+                        values.append(new_year)
+                    values.append(translation_id)
+                    cur.execute(
+                        f"UPDATE translations SET {', '.join(fields)} WHERE id = %s",
+                        values
+                    )
+                conn_mysql.commit()
+            finally:
+                conn_mysql.close()
 
-            bible_json["translation"]["name"] = new_name
-            if new_abbr:
-                bible_json["translation"]["abbreviation"] = new_abbr
-            if new_year:
-                bible_json["translation"]["year"] = new_year
-
-            for v in bible_json.get("verses", []):
-                if "Translation" in v:
-                    v["Translation"] = new_name
-
-        with open(new_json_path, 'w', encoding='utf-8') as f:
-            json.dump(bible_json, f, ensure_ascii=False, indent=2)
-
-        if old_json_path != new_json_path and os.path.exists(old_json_path):
-            os.remove(old_json_path)
-
-        return jsonify(success=True, message=f"Bible '{old_name}' updated to '{new_name}'.", filename=new_filename)
+        return jsonify(success=True, message=f"Bible '{old_name}' updated to '{new_name}'.")
 
     except ValueError as e:
         if upload_path and os.path.exists(upload_path):
@@ -168,14 +200,19 @@ def delete_bible():
     if not name:
         return jsonify(success=False, error='Bible name is required.'), 400
 
+    conn_mysql = get_db_connection()
     try:
-        bible_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'bible')
-        filename = sanitize_filename(name) + ".json"
-        json_path = os.path.join(bible_folder, filename)
-        if os.path.exists(json_path):
-            os.remove(json_path)
-            return jsonify(success=True, message=f"Bible '{name}' deleted.")
-        else:
-            return jsonify(success=False, error=f"Bible '{name}' not found."), 404
+        with conn_mysql.cursor() as cur:
+            cur.execute("SELECT id FROM translations WHERE name = %s", (name,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error=f"Translation '{name}' not found."), 404
+            # Verses are removed via ON DELETE CASCADE
+            cur.execute("DELETE FROM translations WHERE id = %s", (row["id"],))
+        conn_mysql.commit()
     except Exception as e:
         return jsonify(success=False, error=f"Error deleting Bible: {e}"), 400
+    finally:
+        conn_mysql.close()
+
+    return jsonify(success=True, message=f"Bible '{name}' deleted.")
