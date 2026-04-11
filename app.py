@@ -8,6 +8,7 @@ from routes.uploadBible import upload_bible_bp
 from routes.updateBible import update_bible_bp
 from routes.webhook import webhook_bp
 from routes.languages import languages_bp
+from routes.songs import songs_bp
 from db import init_db
 import os
 
@@ -29,6 +30,7 @@ app.register_blueprint(upload_bible_bp)
 app.register_blueprint(update_bible_bp)
 app.register_blueprint(webhook_bp)
 app.register_blueprint(languages_bp)
+app.register_blueprint(songs_bp)
 
 @app.route("/", methods=["GET"])
 def index():

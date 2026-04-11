@@ -3,14 +3,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabUser = document.getElementById('tabUser');
     const tabBible = document.getElementById('tabBible');
     const tabLanguage = document.getElementById('tabLanguage');
+    const tabSong = document.getElementById('tabSong');
     const userSection = document.getElementById('userSection');
     const bibleSection = document.getElementById('bibleSection');
     const languageSection = document.getElementById('languageSection');
+    const songSection = document.getElementById('songSection');
 
     function setActiveTab(active) {
-        const tabs = { user: tabUser, bible: tabBible, language: tabLanguage };
-        const sections = { user: userSection, bible: bibleSection, language: languageSection };
-        const activeColors = { user: 'bg-blue-600 text-white hover:bg-blue-700', bible: 'bg-green-600 text-white hover:bg-green-700', language: 'bg-purple-600 text-white hover:bg-purple-700' };
+        const tabs = { user: tabUser, bible: tabBible, language: tabLanguage, song: tabSong };
+        const sections = { user: userSection, bible: bibleSection, language: languageSection, song: songSection };
+        const activeColors = {
+            user: 'bg-blue-600 text-white hover:bg-blue-700',
+            bible: 'bg-green-600 text-white hover:bg-green-700',
+            language: 'bg-purple-600 text-white hover:bg-purple-700',
+            song: 'bg-orange-600 text-white hover:bg-orange-700'
+        };
         const inactiveColor = 'bg-blue-100 text-blue-700 hover:bg-blue-200';
         Object.keys(tabs).forEach(key => {
             tabs[key].className = `flex-1 py-3 text-lg font-semibold transition ${key === active ? activeColors[key] : inactiveColor}`;
@@ -21,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     tabUser.onclick = () => setActiveTab('user');
     tabBible.onclick = () => setActiveTab('bible');
     tabLanguage.onclick = () => { setActiveTab('language'); fetchLanguages(); };
+    tabSong.onclick = () => { setActiveTab('song'); if (window.fetchSongs) window.fetchSongs(); };
 
     // Default to User tab
     setActiveTab('user');
