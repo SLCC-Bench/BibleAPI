@@ -65,6 +65,49 @@ def init_db():
                     INDEX idx_trans_lookup (translation_id, book_number, chapter, verse_number)
                 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS SongDetails (
+                    id      INT AUTO_INCREMENT PRIMARY KEY,
+                    title   VARCHAR(500),
+                    artist  VARCHAR(300),
+                    album   VARCHAR(300),
+                    genre   VARCHAR(100)
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS SongLyrics (
+                    id       INT AUTO_INCREMENT PRIMARY KEY,
+                    songId   INT,
+                    songPart VARCHAR(100),
+                    lyrics   MEDIUMTEXT,
+                    FOREIGN KEY (songId) REFERENCES SongDetails(id) ON DELETE CASCADE
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS FontSettings (
+                    id               INT AUTO_INCREMENT PRIMARY KEY,
+                    generalSettingId INT,
+                    songId           INT UNIQUE,
+                    scriptureId      INT,
+                    presentationId   INT,
+                    transitionId     INT,
+                    fontSize         INT,
+                    color            VARCHAR(50),
+                    weight           VARCHAR(50),
+                    family           VARCHAR(200),
+                    outline          VARCHAR(200),
+                    shadow           VARCHAR(200),
+                    textcase         VARCHAR(50),
+                    alignment        VARCHAR(50),
+                    bgType           VARCHAR(50),
+                    bgImage          TEXT,
+                    formattingJson   MEDIUMTEXT,
+                    FOREIGN KEY (songId) REFERENCES SongDetails(id) ON DELETE CASCADE
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
         conn.commit()
     finally:
         conn.close()
