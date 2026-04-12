@@ -2,3 +2,4 @@ Flask
 bcrypt
 PyMySQL
 gunicorn
+Flask-Cors

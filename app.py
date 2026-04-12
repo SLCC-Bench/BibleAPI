@@ -10,11 +10,13 @@ from routes.webhook import webhook_bp
 from routes.languages import languages_bp
 from routes.songs import songs_bp
 from db import init_db
+from flask_cors import CORS
 import os
 import threading
 import urllib.request
 
 app = Flask(__name__, static_folder="static")
+CORS(app, origins=["https://slcc-bench.github.io"])
 
 try:
     init_db()
@@ -58,6 +60,7 @@ def keep_alive():
         threading.Event().wait(300)  # 5 minutes
 
 threading.Thread(target=keep_alive, daemon=True).start()
+print("[keep-alive] thread started, pinging every 5 minutes.")
 
 if __name__ == "__main__":
     print("Registered routes:", app.url_map)  # Debug print
