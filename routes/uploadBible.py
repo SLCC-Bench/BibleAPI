@@ -26,6 +26,15 @@ def clean_verse_text(text):
     cleaned = re.sub(r'\[\s*†?\s*\d+[\d\-a-zA-Z†]*\s*\]', '', cleaned)
     cleaned = re.sub(r'[\u2460-\u24FF]', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    # Strip KJV marginal notes appended after the verse
+    # Handles: Heb., Gr., Cald./Chaldee (Chaldean), Hebr., or,
+    match = re.search(r': (?:Heb\.|Gr\.|Cald\.|Chaldee|Chald\.|Chal\.|Hebr\.|or,)', cleaned)
+    if match:
+        i = match.start() - 1
+        while i >= 0 and cleaned[i] not in '.;:,?!':
+            i -= 1
+        if i >= 0:
+            cleaned = cleaned[:i + 1]
     return cleaned
 
 
