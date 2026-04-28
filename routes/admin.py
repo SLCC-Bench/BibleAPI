@@ -57,6 +57,24 @@ def create_registration_code():
         conn.close()
 
 
+@admin_bp.route('/api/registration-codes/<int:code_id>', methods=['DELETE'])
+def delete_registration_code(code_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM RegistrationCodes WHERE id = %s", (code_id,))
+            if not cur.fetchone():
+                return jsonify(success=False, error='Registration code not found.'), 404
+            cur.execute("DELETE FROM RegistrationCodes WHERE id = %s", (code_id,))
+        conn.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, error=str(e)), 500
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/registration-codes/redeem', methods=['POST'])
 def redeem_registration_code():
     data = request.json or {}

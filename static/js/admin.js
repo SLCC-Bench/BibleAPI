@@ -741,7 +741,7 @@ document.getElementById('closeBibleViewer').onclick = function() {
         const tbody = document.getElementById('regCodesTbody');
         tbody.innerHTML = '';
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">No registration codes found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400">No registration codes found.</td></tr>';
             return;
         }
         filtered.forEach(c => {
@@ -848,11 +848,52 @@ document.getElementById('closeBibleViewer').onclick = function() {
                 : '<span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">Available</span>';
             tr.appendChild(tdStatus);
 
+            // Actions
+            const tdActions = document.createElement('td');
+            tdActions.className = 'px-4 py-2';
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'text-red-500 hover:text-red-700 transition';
+            deleteBtn.title = 'Delete code';
+            deleteBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>`;
+            deleteBtn.onclick = () => showDeleteRegCode(c.id, c.registration_code);
+            tdActions.appendChild(deleteBtn);
+            tr.appendChild(tdActions);
+
             tbody.appendChild(tr);
         });
     }
 
     document.getElementById('regCodeSearch').addEventListener('input', renderRegCodesTable);
+
+    function showDeleteRegCode(id, code) {
+        document.getElementById('deleteRegCodeValue').textContent = code;
+        document.getElementById('confirmDeleteRegCode').setAttribute('data-id', id);
+        document.getElementById('deleteRegCodeModal').style.display = '';
+    }
+    window.showDeleteRegCode = showDeleteRegCode;
+
+    document.getElementById('cancelDeleteRegCode').onclick = function() {
+        document.getElementById('deleteRegCodeModal').style.display = 'none';
+    };
+
+    document.getElementById('confirmDeleteRegCode').onclick = function() {
+        const id = this.getAttribute('data-id');
+        showLoading();
+        fetch(`/api/registration-codes/${id}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    showToast('Registration code deleted.', 'success');
+                    document.getElementById('deleteRegCodeModal').style.display = 'none';
+                    fetchRegCodes();
+                } else {
+                    showToast(result.error || 'Delete failed.', 'error');
+                }
+            })
+            .catch(() => showToast('Request failed.', 'error'))
+            .finally(() => hideLoading());
+    };
 
     // Generate random code: XXXXX-XXXXX-XXXXX-XXXXX (uppercase alphanumeric)
     function generateRandomCode() {
