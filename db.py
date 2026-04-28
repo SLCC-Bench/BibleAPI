@@ -108,6 +108,41 @@ def init_db():
                     FOREIGN KEY (songId) REFERENCES SongDetails(id) ON DELETE CASCADE
                 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS RegistrationCodes (
+                    id                INT AUTO_INCREMENT PRIMARY KEY,
+                    registration_code VARCHAR(128) NOT NULL,
+                    registration_type ENUM('trial', 'permanent') NOT NULL,
+                    trial_days        INT NULL,
+                    expiration_date   DATE NULL,
+                    is_used           TINYINT(1) NOT NULL DEFAULT 0,
+                    device_id         VARCHAR(255) NULL,
+                    UNIQUE KEY uq_registration_code (registration_code(100)),
+                    UNIQUE KEY uq_device_id (device_id)
+                ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+            # Migrations for tables that already existed
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD COLUMN trial_days INT NULL AFTER registration_type")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes MODIFY COLUMN registration_code VARCHAR(128) NOT NULL")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD COLUMN device_id VARCHAR(255) NULL")
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD UNIQUE KEY uq_device_id (device_id)")
+                conn.commit()
+            except Exception:
+                pass
         conn.commit()
     finally:
         conn.close()

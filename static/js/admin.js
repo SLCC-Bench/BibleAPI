@@ -4,19 +4,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabBible = document.getElementById('tabBible');
     const tabLanguage = document.getElementById('tabLanguage');
     const tabSong = document.getElementById('tabSong');
+    const tabRegCode = document.getElementById('tabRegCode');
     const userSection = document.getElementById('userSection');
     const bibleSection = document.getElementById('bibleSection');
     const languageSection = document.getElementById('languageSection');
     const songSection = document.getElementById('songSection');
+    const regCodeSection = document.getElementById('regCodeSection');
 
     function setActiveTab(active) {
-        const tabs = { user: tabUser, bible: tabBible, language: tabLanguage, song: tabSong };
-        const sections = { user: userSection, bible: bibleSection, language: languageSection, song: songSection };
+        const tabs = { user: tabUser, bible: tabBible, language: tabLanguage, song: tabSong, regCode: tabRegCode };
+        const sections = { user: userSection, bible: bibleSection, language: languageSection, song: songSection, regCode: regCodeSection };
         const activeColors = {
             user: 'bg-blue-600 text-white hover:bg-blue-700',
             bible: 'bg-green-600 text-white hover:bg-green-700',
             language: 'bg-purple-600 text-white hover:bg-purple-700',
-            song: 'bg-orange-600 text-white hover:bg-orange-700'
+            song: 'bg-orange-600 text-white hover:bg-orange-700',
+            regCode: 'bg-teal-600 text-white hover:bg-teal-700'
         };
         const inactiveColor = 'bg-blue-100 text-blue-700 hover:bg-blue-200';
         Object.keys(tabs).forEach(key => {
@@ -29,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
     tabBible.onclick = () => setActiveTab('bible');
     tabLanguage.onclick = () => { setActiveTab('language'); fetchLanguages(); };
     tabSong.onclick = () => { setActiveTab('song'); if (window.fetchSongs) window.fetchSongs(); };
+    tabRegCode.onclick = () => { setActiveTab('regCode'); fetchRegCodes(); };
 
     // Default to User tab
     setActiveTab('user');
@@ -704,6 +708,233 @@ document.getElementById('closeBibleViewer').onclick = function() {
     document.getElementById('bibleViewerModal').style.display = 'none';
     document.getElementById('bibleViewerContent').innerHTML = '';
 };
+
+    // Registration Codes
+    let regCodeList = [];
+
+    function fetchRegCodes() {
+        showLoading();
+        fetch('/api/registration-codes')
+            .then(res => res.json())
+            .then(data => {
+                regCodeList = data.codes || [];
+                renderRegCodesTable();
+            })
+            .catch(() => showToast('Failed to load registration codes.', 'error'))
+            .finally(() => hideLoading());
+    }
+
+    function trialDaysLabel(days) {
+        if (!days) return '<span class="text-gray-400">—</span>';
+        if (days == 1) return '1 Day';
+        if (days == 30) return '1 Month';
+        return `${days} Days`;
+    }
+
+    function renderRegCodesTable() {
+        const search = document.getElementById('regCodeSearch').value.trim().toLowerCase();
+        const filtered = regCodeList.filter(c =>
+            c.registration_code.toLowerCase().includes(search) ||
+            c.registration_type.toLowerCase().includes(search) ||
+            (c.expiration_date || '').toLowerCase().includes(search)
+        );
+        const tbody = document.getElementById('regCodesTbody');
+        tbody.innerHTML = '';
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">No registration codes found.</td></tr>';
+            return;
+        }
+        filtered.forEach(c => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-teal-50 transition';
+
+            // ID
+            const tdId = document.createElement('td');
+            tdId.className = 'px-4 py-2 text-gray-500 text-sm';
+            tdId.textContent = c.id;
+            tr.appendChild(tdId);
+
+            // Registration Code — ellipsis + copy on hover for plain-text codes
+            const tdCode = document.createElement('td');
+            tdCode.className = 'px-4 py-2 max-w-[220px]';
+
+            if (c.is_used) {
+                // Encrypted: truncate, show full hash as tooltip
+                const span = document.createElement('span');
+                span.className = 'font-mono text-xs text-gray-400 block truncate';
+                span.title = c.registration_code;
+                span.textContent = c.registration_code;
+                tdCode.appendChild(span);
+            } else {
+                // Plain text: truncate + copy icon revealed on hover
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex items-center gap-2';
+
+                const span = document.createElement('span');
+                span.className = 'font-mono text-sm truncate';
+                span.title = c.registration_code;
+                span.textContent = c.registration_code;
+
+                const copyBtn = document.createElement('button');
+                copyBtn.type = 'button';
+                copyBtn.title = 'Copy to clipboard';
+                copyBtn.style.cssText = 'flex-shrink:0;opacity:0;transition:opacity 0.15s;color:#9ca3af;';
+                copyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`;
+
+                copyBtn.onmouseenter = () => copyBtn.style.color = '#0d9488';
+                copyBtn.onmouseleave = () => copyBtn.style.color = '#9ca3af';
+                copyBtn.onclick = () => {
+                    navigator.clipboard.writeText(c.registration_code)
+                        .then(() => showToast('Code copied!', 'success', 1500))
+                        .catch(() => {
+                            const tmp = document.createElement('input');
+                            tmp.value = c.registration_code;
+                            document.body.appendChild(tmp);
+                            tmp.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(tmp);
+                            showToast('Code copied!', 'success', 1500);
+                        });
+                };
+
+                tdCode.addEventListener('mouseenter', () => copyBtn.style.opacity = '1');
+                tdCode.addEventListener('mouseleave', () => copyBtn.style.opacity = '0');
+
+                wrapper.appendChild(span);
+                wrapper.appendChild(copyBtn);
+                tdCode.appendChild(wrapper);
+            }
+            tr.appendChild(tdCode);
+
+            // Type
+            const tdType = document.createElement('td');
+            tdType.className = 'px-4 py-2';
+            tdType.innerHTML = c.registration_type === 'permanent'
+                ? '<span class="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">Permanent</span>'
+                : '<span class="bg-yellow-100 text-yellow-700 text-xs font-semibold px-2 py-0.5 rounded">Trial</span>';
+            tr.appendChild(tdType);
+
+            // Duration
+            const tdDuration = document.createElement('td');
+            tdDuration.className = 'px-4 py-2 text-sm';
+            tdDuration.innerHTML = c.registration_type === 'trial' ? trialDaysLabel(c.trial_days) : '<span class="text-gray-400">—</span>';
+            tr.appendChild(tdDuration);
+
+            // Expiry
+            const tdExpiry = document.createElement('td');
+            tdExpiry.className = 'px-4 py-2 text-sm';
+            tdExpiry.innerHTML = c.expiration_date || '<span class="text-gray-400">Not yet set</span>';
+            tr.appendChild(tdExpiry);
+
+            // Device ID
+            const tdDevice = document.createElement('td');
+            tdDevice.className = 'px-4 py-2 max-w-[180px]';
+            if (c.device_id) {
+                const span = document.createElement('span');
+                span.className = 'font-mono text-xs text-gray-500 block truncate';
+                span.title = c.device_id;
+                span.textContent = c.device_id;
+                tdDevice.appendChild(span);
+            } else {
+                tdDevice.innerHTML = '<span class="text-gray-300">—</span>';
+            }
+            tr.appendChild(tdDevice);
+
+            // Status
+            const tdStatus = document.createElement('td');
+            tdStatus.className = 'px-4 py-2';
+            tdStatus.innerHTML = c.is_used
+                ? '<span class="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded">Used</span>'
+                : '<span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">Available</span>';
+            tr.appendChild(tdStatus);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('regCodeSearch').addEventListener('input', renderRegCodesTable);
+
+    // Generate random code: XXXXX-XXXXX-XXXXX-XXXXX (uppercase alphanumeric)
+    function generateRandomCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
+        const group = () => Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        return `${group()}-${group()}-${group()}-${group()}`;
+    }
+
+    // Create Registration Code Modal
+    function openCreateRegCodeModal() {
+        document.getElementById('newRegCode').value = generateRandomCode();
+        setRegType('trial');
+        setTrialDays('7');
+        document.getElementById('createRegCodeModal').style.display = '';
+    }
+
+    function closeCreateRegCodeModal() {
+        document.getElementById('createRegCodeModal').style.display = 'none';
+    }
+
+    function setRegType(type) {
+        document.getElementById('newRegType').value = type;
+        const isTrial = type === 'trial';
+        // Type button active states
+        document.getElementById('typeBtnTrial').className = isTrial
+            ? 'regtype-btn flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 border-yellow-400 bg-yellow-400 text-white transition font-semibold text-sm shadow'
+            : 'regtype-btn flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition font-semibold text-sm hover:border-yellow-400 hover:text-yellow-600';
+        document.getElementById('typeBtnPermanent').className = !isTrial
+            ? 'regtype-btn flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 border-blue-500 bg-blue-500 text-white transition font-semibold text-sm shadow'
+            : 'regtype-btn flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 border-gray-200 bg-white text-gray-500 transition font-semibold text-sm hover:border-blue-400 hover:text-blue-600';
+        // Show/hide duration and permanent note
+        document.getElementById('trialDurationSection').style.display = isTrial ? '' : 'none';
+        document.getElementById('permanentNote').classList.toggle('hidden', isTrial);
+    }
+
+    function setTrialDays(days) {
+        document.getElementById('newTrialDays').value = days;
+        document.querySelectorAll('.duration-btn').forEach(btn => {
+            const active = btn.dataset.days === String(days);
+            btn.className = active
+                ? 'duration-btn py-2 rounded-lg border-2 border-teal-500 bg-teal-500 text-white text-sm font-semibold transition'
+                : 'duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition';
+        });
+    }
+
+    document.getElementById('createRegCodeBtn').onclick = openCreateRegCodeModal;
+    document.getElementById('closeCreateRegCodeModal').onclick = closeCreateRegCodeModal;
+    document.getElementById('cancelCreateRegCode').onclick = closeCreateRegCodeModal;
+    document.getElementById('generateCodeBtn').onclick = () => {
+        document.getElementById('newRegCode').value = generateRandomCode();
+    };
+    document.getElementById('typeBtnTrial').onclick = () => setRegType('trial');
+    document.getElementById('typeBtnPermanent').onclick = () => setRegType('permanent');
+    document.querySelectorAll('.duration-btn').forEach(btn => {
+        btn.onclick = () => setTrialDays(btn.dataset.days);
+    });
+
+    document.getElementById('createRegCodeForm').onsubmit = function(e) {
+        e.preventDefault();
+        const code = document.getElementById('newRegCode').value.trim();
+        const regType = document.getElementById('newRegType').value;
+        const trialDays = regType === 'trial' ? document.getElementById('newTrialDays').value : null;
+
+        showLoading();
+        fetch('/api/registration-codes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registration_code: code, registration_type: regType, trial_days: trialDays })
+        })
+        .then(res => res.json())
+        .then(result => {
+            if (result.success) {
+                showToast('Registration code created.', 'success');
+                closeCreateRegCodeModal();
+                fetchRegCodes();
+            } else {
+                showToast(result.error || 'Failed to create code.', 'error');
+            }
+        })
+        .catch(() => showToast('Request failed.', 'error'))
+        .finally(() => hideLoading());
+    };
 });
 
 
