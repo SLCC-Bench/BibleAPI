@@ -75,6 +75,44 @@ def delete_registration_code(code_id):
         conn.close()
 
 
+@admin_bp.route('/api/registration-codes/check', methods=['POST'])
+def check_registration():
+    data = request.json or {}
+    device_id = (data.get('device_id') or '').strip()
+
+    if not device_id:
+        return jsonify(success=False, error='device_id is required.'), 400
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT registration_type, expiration_date, is_used
+                FROM RegistrationCodes
+                WHERE device_id = %s
+            """, (device_id,))
+            row = cur.fetchone()
+
+        if not row:
+            return jsonify(registered=False)
+
+        expiration_date = str(row['expiration_date']) if row['expiration_date'] else None
+
+        # For trial codes, check if the expiration date has passed
+        is_expired = False
+        if row['registration_type'] == 'trial' and expiration_date:
+            is_expired = date.today() > row['expiration_date']
+
+        return jsonify(
+            registered=True,
+            registration_type=row['registration_type'],
+            expiration_date=expiration_date,
+            is_expired=is_expired
+        )
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/registration-codes/redeem', methods=['POST'])
 def redeem_registration_code():
     data = request.json or {}
