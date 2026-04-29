@@ -727,6 +727,8 @@ document.getElementById('closeBibleViewer').onclick = function() {
     function trialDaysLabel(days) {
         if (!days) return '<span class="text-gray-400">—</span>';
         if (days == 1) return '1 Day';
+        if (days == 7) return '7 Days';
+        if (days == 15) return '15 Days';
         if (days == 30) return '1 Month';
         return `${days} Days`;
     }
@@ -930,7 +932,12 @@ document.getElementById('closeBibleViewer').onclick = function() {
     }
 
     function setTrialDays(days) {
-        document.getElementById('newTrialDays').value = days;
+        const isCustom = days === 'custom';
+        document.getElementById('newTrialDays').value = isCustom ? '' : days;
+        document.getElementById('customDaysSection').classList.toggle('hidden', !isCustom);
+        if (isCustom) {
+            document.getElementById('customDaysInput').focus();
+        }
         document.querySelectorAll('.duration-btn').forEach(btn => {
             const active = btn.dataset.days === String(days);
             btn.className = active
@@ -938,6 +945,10 @@ document.getElementById('closeBibleViewer').onclick = function() {
                 : 'duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition';
         });
     }
+
+    document.getElementById('customDaysInput').addEventListener('input', function() {
+        document.getElementById('newTrialDays').value = this.value;
+    });
 
     document.getElementById('createRegCodeBtn').onclick = openCreateRegCodeModal;
     document.getElementById('closeCreateRegCodeModal').onclick = closeCreateRegCodeModal;
@@ -955,7 +966,12 @@ document.getElementById('closeBibleViewer').onclick = function() {
         e.preventDefault();
         const code = document.getElementById('newRegCode').value.trim();
         const regType = document.getElementById('newRegType').value;
-        const trialDays = regType === 'trial' ? document.getElementById('newTrialDays').value : null;
+        let trialDays = regType === 'trial' ? document.getElementById('newTrialDays').value : null;
+        if (regType === 'trial' && (!trialDays || trialDays < 1)) {
+            showToast('Please enter a valid number of days.', 'error');
+            document.getElementById('customDaysInput').focus();
+            return;
+        }
 
         showLoading();
         fetch('/api/registration-codes', {

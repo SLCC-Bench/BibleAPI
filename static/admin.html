@@ -435,11 +435,19 @@
                     <!-- Trial duration (shown only for Trial) -->
                     <div id="trialDurationSection" class="flex flex-col gap-2">
                         <label class="font-semibold text-teal-700 text-sm">Trial Duration <span class="text-red-500">*</span></label>
-                        <div class="grid grid-cols-4 gap-2">
+                        <div class="grid grid-cols-5 gap-2">
                             <button type="button" class="duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition" data-days="1">1 Day</button>
                             <button type="button" class="duration-btn py-2 rounded-lg border-2 border-teal-500 bg-teal-500 text-white text-sm font-semibold transition" data-days="7">7 Days</button>
                             <button type="button" class="duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition" data-days="15">15 Days</button>
                             <button type="button" class="duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition" data-days="30">1 Month</button>
+                            <button type="button" class="duration-btn py-2 rounded-lg border-2 border-gray-200 bg-white text-gray-500 text-sm font-semibold hover:border-teal-400 hover:text-teal-700 transition" data-days="custom">Custom</button>
+                        </div>
+                        <div id="customDaysSection" class="hidden">
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="customDaysInput" min="1" max="3650" placeholder="e.g. 45"
+                                    class="flex-1 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400">
+                                <span class="text-sm text-gray-500 whitespace-nowrap">days</span>
+                            </div>
                         </div>
                         <p class="text-xs text-gray-400">Expiration date is set automatically when the code is redeemed.</p>
                         <input type="hidden" id="newTrialDays" value="7">
