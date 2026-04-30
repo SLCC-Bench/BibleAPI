@@ -57,6 +57,40 @@ def create_registration_code():
         conn.close()
 
 
+@admin_bp.route('/api/registration-codes/<int:code_id>/expire', methods=['POST'])
+def expire_registration_code(code_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, registration_type, is_used, expiration_date
+                FROM RegistrationCodes WHERE id = %s
+            """, (code_id,))
+            row = cur.fetchone()
+
+        if not row:
+            return jsonify(success=False, error='Registration code not found.'), 404
+        if not row['is_used']:
+            return jsonify(success=False, error='Code has not been activated yet.'), 400
+        if row['registration_type'] == 'permanent':
+            return jsonify(success=False, error='Permanent codes cannot be expired.'), 400
+        if row['expiration_date'] and date.today() > row['expiration_date']:
+            return jsonify(success=False, error='Code is already expired.'), 400
+
+        yesterday = date.today() - timedelta(days=1)
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE RegistrationCodes SET expiration_date = %s WHERE id = %s
+            """, (yesterday, code_id))
+        conn.commit()
+        return jsonify(success=True, expiration_date=str(yesterday))
+    except Exception as e:
+        conn.rollback()
+        return jsonify(success=False, error=str(e)), 500
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/registration-codes/<int:code_id>', methods=['DELETE'])
 def delete_registration_code(code_id):
     conn = get_db_connection()

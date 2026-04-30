@@ -852,7 +852,22 @@ document.getElementById('closeBibleViewer').onclick = function() {
 
             // Actions
             const tdActions = document.createElement('td');
-            tdActions.className = 'px-4 py-2';
+            tdActions.className = 'px-4 py-2 flex items-center gap-2';
+
+            // Expire button — only for active trial codes that are not yet expired
+            const isActiveTrial = c.is_used &&
+                c.registration_type === 'trial' &&
+                (!c.expiration_date || new Date(c.expiration_date) >= new Date(new Date().toDateString()));
+            if (isActiveTrial) {
+                const expireBtn = document.createElement('button');
+                expireBtn.type = 'button';
+                expireBtn.className = 'text-orange-400 hover:text-orange-600 transition';
+                expireBtn.title = 'Manually expire';
+                expireBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+                expireBtn.onclick = () => showExpireRegCode(c.id, c.registration_code);
+                tdActions.appendChild(expireBtn);
+            }
+
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.className = 'text-red-500 hover:text-red-700 transition';
@@ -877,6 +892,35 @@ document.getElementById('closeBibleViewer').onclick = function() {
 
     document.getElementById('cancelDeleteRegCode').onclick = function() {
         document.getElementById('deleteRegCodeModal').style.display = 'none';
+    };
+
+    function showExpireRegCode(id, code) {
+        document.getElementById('expireRegCodeValue').textContent = code;
+        document.getElementById('confirmExpireRegCode').setAttribute('data-id', id);
+        document.getElementById('expireRegCodeModal').style.display = '';
+    }
+    window.showExpireRegCode = showExpireRegCode;
+
+    document.getElementById('cancelExpireRegCode').onclick = function() {
+        document.getElementById('expireRegCodeModal').style.display = 'none';
+    };
+
+    document.getElementById('confirmExpireRegCode').onclick = function() {
+        const id = this.getAttribute('data-id');
+        showLoading();
+        fetch(`/api/registration-codes/${id}/expire`, { method: 'POST' })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    showToast('Registration code expired.', 'success');
+                    document.getElementById('expireRegCodeModal').style.display = 'none';
+                    fetchRegCodes();
+                } else {
+                    showToast(result.error || 'Failed to expire code.', 'error');
+                }
+            })
+            .catch(() => showToast('Request failed.', 'error'))
+            .finally(() => hideLoading());
     };
 
     document.getElementById('confirmDeleteRegCode').onclick = function() {
