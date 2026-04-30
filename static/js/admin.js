@@ -845,9 +845,15 @@ document.getElementById('closeBibleViewer').onclick = function() {
             // Status
             const tdStatus = document.createElement('td');
             tdStatus.className = 'px-4 py-2';
-            tdStatus.innerHTML = c.is_used
-                ? '<span class="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded">Used</span>'
-                : '<span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">Available</span>';
+            let statusBadge;
+            if (!c.is_used) {
+                statusBadge = '<span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">Available</span>';
+            } else if (c.registration_type === 'trial' && c.expiration_date && new Date(c.expiration_date) < new Date(new Date().toDateString())) {
+                statusBadge = '<span class="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded">Expired</span>';
+            } else {
+                statusBadge = '<span class="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded">Used</span>';
+            }
+            tdStatus.innerHTML = statusBadge;
             tr.appendChild(tdStatus);
 
             // Actions
