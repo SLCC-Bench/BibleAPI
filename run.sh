@@ -6,5 +6,6 @@ export MYSQL_DB=test
 export MYSQL_PORT=4000
 export MYSQL_SSL_CA=/etc/ssl/cert.pem
 export PORT=5001
+export HMAC_SECRET=change-this-to-a-strong-secret
 
 venv/bin/python app.py

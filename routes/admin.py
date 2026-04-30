@@ -2,8 +2,55 @@ from flask import Blueprint, jsonify, request
 from db import get_db_connection
 from datetime import date, timedelta
 import bcrypt
+import hmac
+import hashlib
+import os
+import re
 
 admin_bp = Blueprint('admin', __name__)
+
+_HMAC_SECRET = os.environ.get('HMAC_SECRET', 'praisehub-secret-key').encode('utf-8')
+
+def hash_device_id(device_id):
+    return hmac.new(_HMAC_SECRET, device_id.encode('utf-8'), hashlib.sha256).hexdigest()
+
+def is_hashed(value):
+    """True if value is already a SHA-256 hex digest (64 lowercase hex chars)."""
+    return bool(re.match(r'^[0-9a-f]{64}$', value))
+
+
+def _lookup_by_device(cur, device_id):
+    """
+    Look up a RegistrationCodes row by device_id.
+    Tries the hashed value first; falls back to plain-text for existing
+    unencrypted records and migrates them on the way.
+    Returns (row, hashed_device_id).
+    """
+    hashed = hash_device_id(device_id)
+
+    cur.execute("""
+        SELECT id, registration_type, expiration_date
+        FROM RegistrationCodes WHERE device_id = %s
+    """, (hashed,))
+    row = cur.fetchone()
+    if row:
+        return row, hashed
+
+    # Backward compat: check plain-text device_id (pre-encryption records)
+    if not is_hashed(device_id):
+        cur.execute("""
+            SELECT id, registration_type, expiration_date
+            FROM RegistrationCodes WHERE device_id = %s
+        """, (device_id,))
+        row = cur.fetchone()
+        if row:
+            # Migrate plain-text device_id to hashed
+            cur.execute("UPDATE RegistrationCodes SET device_id = %s WHERE id = %s",
+                        (hashed, row['id']))
+        return row, hashed
+
+    return None, hashed
+
 
 @admin_bp.route('/api/registration-codes', methods=['GET'])
 def get_registration_codes():
@@ -79,9 +126,8 @@ def expire_registration_code(code_id):
 
         yesterday = date.today() - timedelta(days=1)
         with conn.cursor() as cur:
-            cur.execute("""
-                UPDATE RegistrationCodes SET expiration_date = %s WHERE id = %s
-            """, (yesterday, code_id))
+            cur.execute("UPDATE RegistrationCodes SET expiration_date = %s WHERE id = %s",
+                        (yesterday, code_id))
         conn.commit()
         return jsonify(success=True, expiration_date=str(yesterday))
     except Exception as e:
@@ -120,22 +166,18 @@ def check_registration():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT registration_type, expiration_date, is_used
-                FROM RegistrationCodes
-                WHERE device_id = %s
-            """, (device_id,))
-            row = cur.fetchone()
+            row, _ = _lookup_by_device(cur, device_id)
+            conn.commit()  # persist any migration update
 
         if not row:
             return jsonify(registered=False)
 
         expiration_date = str(row['expiration_date']) if row['expiration_date'] else None
-
-        # For trial codes, check if the expiration date has passed
-        is_expired = False
-        if row['registration_type'] == 'trial' and expiration_date:
-            is_expired = date.today() > row['expiration_date']
+        is_expired = (
+            row['registration_type'] == 'trial' and
+            row['expiration_date'] is not None and
+            date.today() > row['expiration_date']
+        )
 
         return jsonify(
             registered=True,
@@ -161,12 +203,7 @@ def redeem_registration_code():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # Check if this device already activated a code
-            cur.execute("""
-                SELECT id, registration_type, expiration_date
-                FROM RegistrationCodes WHERE device_id = %s
-            """, (device_id,))
-            existing = cur.fetchone()
+            existing, hashed_device = _lookup_by_device(cur, device_id)
             if existing:
                 is_expired_trial = (
                     existing['registration_type'] == 'trial' and
@@ -175,7 +212,7 @@ def redeem_registration_code():
                 )
                 if not is_expired_trial:
                     return jsonify(success=False, error='This device already has an active registration.'), 409
-                # Expired trial — clear the old device binding so the new code can claim this device
+                # Expired trial — clear the old binding so the new code can claim this device
                 cur.execute("UPDATE RegistrationCodes SET device_id = NULL WHERE id = %s", (existing['id'],))
 
             cur.execute("""
@@ -202,7 +239,7 @@ def redeem_registration_code():
                 UPDATE RegistrationCodes
                 SET is_used = 1, expiration_date = %s, registration_code = %s, device_id = %s
                 WHERE id = %s
-            """, (expiration_date, hashed_code, device_id, row['id']))
+            """, (expiration_date, hashed_code, hashed_device, row['id']))
         conn.commit()
 
         return jsonify(
