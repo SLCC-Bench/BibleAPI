@@ -11,8 +11,12 @@ admin_bp = Blueprint('admin', __name__)
 
 _HMAC_SECRET = os.environ.get('HMAC_SECRET', 'praisehub-secret-key').encode('utf-8')
 
+def normalize_device_id(device_id):
+    return device_id.strip().lower()
+
 def hash_device_id(device_id):
-    return hmac.new(_HMAC_SECRET, device_id.encode('utf-8'), hashlib.sha256).hexdigest()
+    normalized = normalize_device_id(device_id)
+    return hmac.new(_HMAC_SECRET, normalized.encode('utf-8'), hashlib.sha256).hexdigest()
 
 def is_hashed(value):
     """True if value is already a SHA-256 hex digest (64 lowercase hex chars)."""
