@@ -129,10 +129,20 @@ def redeem_registration_code():
         with conn.cursor() as cur:
             # Check if this device already activated a code
             cur.execute("""
-                SELECT id FROM RegistrationCodes WHERE device_id = %s
+                SELECT id, registration_type, expiration_date
+                FROM RegistrationCodes WHERE device_id = %s
             """, (device_id,))
-            if cur.fetchone():
-                return jsonify(success=False, error='This device already has an active registration.'), 409
+            existing = cur.fetchone()
+            if existing:
+                is_expired_trial = (
+                    existing['registration_type'] == 'trial' and
+                    existing['expiration_date'] is not None and
+                    date.today() > existing['expiration_date']
+                )
+                if not is_expired_trial:
+                    return jsonify(success=False, error='This device already has an active registration.'), 409
+                # Expired trial — clear the old device binding so the new code can claim this device
+                cur.execute("UPDATE RegistrationCodes SET device_id = NULL WHERE id = %s", (existing['id'],))
 
             cur.execute("""
                 SELECT id, registration_type, trial_days, is_used
