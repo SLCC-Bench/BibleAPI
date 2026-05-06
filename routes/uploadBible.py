@@ -109,7 +109,14 @@ def upload_bible():
         try:
             cursor.execute("SELECT book_number, chapter, verse, title FROM stories")
             for row in cursor.fetchall():
-                story_titles[(row[0], row[1], row[2])] = row[3]
+                key = (row[0], row[1], row[2])
+                title = row[3]
+                # Skip cross-reference entries like "(<x>490 3:23-38</x>)"
+                if not title or re.search(r'<x\b', title, re.IGNORECASE):
+                    continue
+                # Keep only the first readable title per verse key
+                if key not in story_titles:
+                    story_titles[key] = title
         except Exception:
             pass
 
