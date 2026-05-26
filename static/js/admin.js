@@ -83,10 +83,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td class="px-3 py-2">${user.firstname}</td>
                         <td class="px-3 py-2">${user.lastname}</td>
                         <td class="px-3 py-2">${user.username}</td>
-                        <td class="px-3 py-2">${user.email}</td>
                         <td class="px-3 py-2">${user.orgname || ''}</td>
                         <td class="px-3 py-2">${user.mobile || ''}</td>
-                        <td class="px-3 py-2 text-center">${user.isEmailVerified ? '✔️' : ''}</td>
                         <td class="px-3 py-2 text-center">${user.isRegistered ? '✔️' : ''}</td>
                         <td class="px-3 py-2 flex gap-2">
                             <button onclick="editUser(${user.id})" class="text-blue-600 hover:underline" title="Edit User">✏️</button>
@@ -114,10 +112,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('firstname').value = user.firstname;
                 document.getElementById('lastname').value = user.lastname;
                 document.getElementById('username').value = user.username;
-                document.getElementById('email').value = user.email;
                 document.getElementById('orgname').value = user.orgname || '';
                 document.getElementById('mobile').value = user.mobile || '';
-                document.getElementById('isEmailVerified').checked = !!user.isEmailVerified;
                 document.getElementById('isRegistered').checked = !!user.isRegistered;
                 document.getElementById('password').value = '';
             })
@@ -136,13 +132,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const firstname = document.getElementById('firstname').value;
         const lastname = document.getElementById('lastname').value;
         const username = document.getElementById('username').value;
-        const email = document.getElementById('email').value;
         const orgname = document.getElementById('orgname').value;
         const mobile = document.getElementById('mobile').value;
         const password = document.getElementById('password').value;
-        const isEmailVerified = document.getElementById('isEmailVerified').checked ? 1 : 0;
         const isRegistered = document.getElementById('isRegistered').checked ? 1 : 0;
-        const payload = { id, firstname, lastname, username, email, orgname, mobile, isEmailVerified, isRegistered };
+        const payload = { id, firstname, lastname, username, orgname, mobile, isRegistered };
         if (password) payload.password = password;
         const method = id ? 'PUT' : 'POST';
         fetch('/api/users', {
@@ -183,7 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const user = (data.users || []).find(u => u.id === id);
                 if (!user) return;
                 document.getElementById('deleteUserModal').style.display = '';
-                document.getElementById('deleteUserName').textContent = user.username || user.email || user.id;
+                document.getElementById('deleteUserName').textContent = user.username || user.id;
                 document.getElementById('confirmDeleteUser').setAttribute('data-user', id);
                 document.getElementById('deleteUserMsg').textContent = '';
             })

@@ -1,9 +1,6 @@
 from flask import Flask, send_from_directory
 from routes.users import users_bp
-from routes.auth import auth_bp
 from routes.bible import bible_bp
-from routes.registration import registration_bp
-from routes.password import password_bp
 from routes.uploadBible import upload_bible_bp
 from routes.updateBible import update_bible_bp
 from routes.webhook import webhook_bp
@@ -27,10 +24,7 @@ except Exception as e:
 
 # Register blueprints without url_prefix
 app.register_blueprint(users_bp)
-app.register_blueprint(auth_bp)
 app.register_blueprint(bible_bp)
-app.register_blueprint(registration_bp)
-app.register_blueprint(password_bp)
 app.register_blueprint(upload_bible_bp)
 app.register_blueprint(update_bible_bp)
 app.register_blueprint(webhook_bp)
