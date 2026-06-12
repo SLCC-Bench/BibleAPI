@@ -31,7 +31,8 @@ def clean_verse_text_for_response(text):
     cleaned = str(text)
     cleaned = re.sub(r'<S>\d+</S>', '', cleaned)
     cleaned = re.sub(r'<[^>]+>', '', cleaned)
-    cleaned = re.sub(r'\[\s*\d+[a-zA-Z]?†?\s*\]', '', cleaned)
+    cleaned = re.sub(r'\[\s*(?:†?\s*\d+[\d\-:a-zA-Z†]*|#\s*[*†‡§¶]+|¶+)\s*\]', '', cleaned)
+    cleaned = re.sub(r'¶+', '', cleaned)
     cleaned = re.sub(r'[\u2460-\u24FF]', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     return cleaned
