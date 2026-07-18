@@ -3,3 +3,5 @@ bcrypt
 PyMySQL
 gunicorn
 Flask-Cors
+certifi
+pyinstaller

@@ -1,11 +1,20 @@
 #!/bin/bash
-export MYSQL_HOST=gateway01.ap-southeast-1.prod.aws.tidbcloud.com
-export MYSQL_USER=3Jm9drT9RPP2wrC.root
-export MYSQL_PASSWORD=A1AKFfTfuuqIXRaB
-export MYSQL_DB=test
-export MYSQL_PORT=4000
-export MYSQL_SSL_CA=/etc/ssl/cert.pem
-export PORT=5001
-export HMAC_SECRET=change-this-to-a-strong-secret
+# Local BibleAPI launcher. Credentials come from bibleapi.env.json (see bibleapi.env.json.example).
+# Do NOT put TiDB passwords in this file.
+set -euo pipefail
+cd "$(dirname "$0")"
 
-venv/bin/python app.py
+export BIBLEAPI_LOCAL="${BIBLEAPI_LOCAL:-1}"
+export PORT="${PORT:-5000}"
+
+if [[ ! -f bibleapi.env.json ]]; then
+  echo "Missing bibleapi.env.json"
+  echo "Copy bibleapi.env.json.example → bibleapi.env.json and fill in TiDB credentials."
+  exit 1
+fi
+
+if [[ -x venv/bin/python ]]; then
+  exec venv/bin/python app.py
+fi
+
+exec python3 app.py
