@@ -57,6 +57,22 @@ def index():
 def healthz():
     return "ok", 200
 
+@app.route("/readyz", methods=["GET"])
+def readyz():
+    """Liveness for process is /healthz; this checks TiDB connectivity."""
+    try:
+        from db import get_db_connection
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        finally:
+            conn.close()
+        return "ok", 200
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 503
+
 # Debug endpoint to list all routes (optional, for troubleshooting)
 @app.route("/routes", methods=["GET"])
 def show_routes():
