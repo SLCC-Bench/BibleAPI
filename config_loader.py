@@ -67,6 +67,7 @@ def load_config_into_environ() -> dict:
         "MYSQL_USER": "MYSQL_USER",
         "MYSQL_PASSWORD": "MYSQL_PASSWORD",
         "MYSQL_DB": "MYSQL_DB",
+        "MYSQL_DATABASE": "MYSQL_DB",
         "MYSQL_SSL_CA": "MYSQL_SSL_CA",
         "MYSQL_SSL": "MYSQL_SSL",
         "PORT": "PORT",
