@@ -1,18 +1,17 @@
 from flask import Blueprint, request, jsonify
 import os
-import sqlite3
 import re
+import sqlite3
 import tempfile
-import threading
 
-from routes.bible import STANDARD_BOOKS, ensure_bible_db
+from routes.uploadBible import clean_verse_text
+from db import get_db_connection
 
 update_bible_bp = Blueprint('update_bible', __name__)
 
+
 @update_bible_bp.route('/api/update-bible', methods=['POST'])
 def update_bible():
-    ensure_bible_db()
-
     old_name = request.form.get('old_name', '').strip()
     new_name = request.form.get('new_name', '').strip()
     new_abbr = request.form.get('new_abbreviation', '').strip()
@@ -22,121 +21,205 @@ def update_bible():
     if not old_name or not new_name:
         return jsonify(success=False, error='Old name and new name are required.'), 400
 
-    # Save uploaded file if provided
-    file_path = None
-    if file and file.filename and (file.filename.lower().endswith('.sqlite3') or file.filename.lower().endswith('.sqlite')):
-        file_path = os.path.join(tempfile.gettempdir(), file.filename)
-        file.save(file_path)
-        # Validate book count before starting thread
-        try:
-            conn = sqlite3.connect(file_path)
-            cursor = conn.cursor()
+    conn_mysql = get_db_connection()
+    try:
+        with conn_mysql.cursor() as cur:
+            cur.execute("SELECT id FROM translations WHERE name = %s", (old_name,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error=f"Translation '{old_name}' not found."), 404
+            translation_id = row["id"]
+    finally:
+        conn_mysql.close()
+
+    upload_path = None
+    try:
+        if file and file.filename:
+            if not (file.filename.lower().endswith('.sqlite3') or file.filename.lower().endswith('.sqlite')):
+                return jsonify(success=False, error='Invalid file type. Only .sqlite3 or .sqlite files are accepted.'), 400
+
+            upload_path = os.path.join(tempfile.gettempdir(), file.filename)
+            file.save(upload_path)
+
+            conn_sqlite = sqlite3.connect(upload_path)
+            cursor = conn_sqlite.cursor()
+
             cursor.execute("SELECT COUNT(*) FROM books")
             book_count = cursor.fetchone()[0]
-            conn.close()
-            if book_count not in (66, 27):
-                os.remove(file_path)
-                return jsonify(success=False, error='Uploaded Bible must have exactly 66 books (full) or 27 books (New Testament).'), 400
-        except Exception as e:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            return jsonify(success=False, error=f'Invalid SQLite3 file: {e}'), 400
+            if book_count not in (66, 39, 27):
+                conn_sqlite.close()
+                raise ValueError('Uploaded Bible must have exactly 66, 39, or 27 books.')
 
-    # Launch background thread for heavy DB work
-    thread = threading.Thread(
-        target=process_bible_update,
-        args=(old_name, new_name, new_abbr, new_year, file_path)
-    )
-    thread.start()
+            language = cursor.execute(
+                "SELECT value FROM info WHERE name='language' LIMIT 1"
+            ).fetchone()
+            language = language[0] if language else None
 
-    return jsonify(success=True, message="Bible update started. Changes will appear shortly.")
+            src_abbr = cursor.execute(
+                "SELECT value FROM info WHERE name='abbreviation' LIMIT 1"
+            ).fetchone()
+            src_abbr = src_abbr[0] if src_abbr else new_abbr
 
-def process_bible_update(old_name, new_name, new_abbr, new_year, file_path):
-    try:
-        bible_db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db', 'bible.SQLite3')
-        conn = sqlite3.connect(bible_db_path, timeout=30)
-        cur = conn.cursor()
+            src_year = cursor.execute(
+                "SELECT value FROM info WHERE name='year' LIMIT 1"
+            ).fetchone()
+            src_year = src_year[0] if src_year else new_year
 
-        # Find translation to update
-        cur.execute("SELECT id FROM translations WHERE name=?", (old_name,))
-        row = cur.fetchone()
-        if not row:
-            print(f"Update failed: Bible '{old_name}' not found.")
-            conn.close()
-            if file_path and os.path.exists(file_path):
-                os.remove(file_path)
-            return
-        translation_id = row[0]
+            cursor.execute("PRAGMA table_info(books)")
+            columns = [row[1] for row in cursor.fetchall()]
 
-        # Update basic info
-        cur.execute("UPDATE translations SET name=?, abbreviation=? WHERE id=?", (new_name, new_abbr, translation_id))
-        conn.commit()
+            if 'sorting_order' in columns:
+                verses_data = cursor.execute(
+                    "SELECT b.book_number, b.sorting_order, b.long_name, v.chapter, v.verse, v.text "
+                    "FROM verses v JOIN books b ON v.book_number = b.book_number"
+                ).fetchall()
+            else:
+                verses_data = cursor.execute(
+                    "SELECT b.book_number, b.book_number as sorting_order, b.long_name, v.chapter, v.verse, v.text "
+                    "FROM verses v JOIN books b ON v.book_number = b.book_number"
+                ).fetchall()
 
-        # Update year in info table
-        cur.execute("SELECT COUNT(*) FROM info WHERE translation_id=? AND name='year'", (translation_id,))
-        exists = cur.fetchone()[0]
-        if exists:
-            cur.execute("UPDATE info SET value=? WHERE translation_id=? AND name='year'", (new_year, translation_id))
-        elif new_year:
-            cur.execute("INSERT INTO info (translation_id, name, value) VALUES (?, 'year', ?)", (translation_id, new_year))
-        conn.commit()
-
-        # If no file provided, update is done
-        if not file_path:
-            conn.close()
-            return
-
-        # Extract new Bible data
-        src_conn = sqlite3.connect(file_path)
-        src_cursor = src_conn.cursor()
-        books_data = src_cursor.execute("SELECT book_number, long_name FROM books ORDER BY book_number").fetchall()
-        # Validate book count again for safety
-        if len(books_data) not in (66, 27):
-            src_conn.close()
-            os.remove(file_path)
-            print("Upload failed: must have exactly 66 or 27 books.")
-            return
-        # Force long_name to standard list
-        if len(books_data) == 66:
-            books_data = [(num, STANDARD_BOOKS[i]) for i, (num, _) in enumerate(books_data)]
-        elif len(books_data) == 27:
-            books_data = [(num, STANDARD_BOOKS[i + 39]) for i, (num, _) in enumerate(books_data)]
-        verses_data = src_cursor.execute("SELECT book_number, chapter, verse, text FROM verses ORDER BY book_number, chapter, verse").fetchall()
-        info_data = src_cursor.execute("SELECT name, value FROM info").fetchall()
-        src_conn.close()
-        os.remove(file_path)
-
-        # Replace old data with new data
-        cur.execute("DELETE FROM books WHERE translation_id=?", (translation_id,))
-        cur.execute("DELETE FROM verses WHERE translation_id=?", (translation_id,))
-        cur.execute("DELETE FROM info WHERE translation_id=?", (translation_id,))
-        conn.commit()
-
-        # Insert new info
-        if new_year:
-            cur.execute("INSERT INTO info (translation_id, name, value) VALUES (?, 'year', ?)", (translation_id, new_year))
-        for name, value in info_data:
-            if name != 'year':
-                cur.execute("INSERT INTO info (translation_id, name, value) VALUES (?, ?, ?)", (translation_id, name, value))
-
-        # Insert new books
-        for book_number, long_name in books_data:
-            cur.execute("INSERT INTO books (translation_id, book_number, long_name) VALUES (?, ?, ?)", (translation_id, book_number, long_name))
-
-        # Insert new verses in batches to avoid lock
-        batch_size = 1000
-        for i in range(0, len(verses_data), batch_size):
-            batch = verses_data[i:i + batch_size]
-            cur.executemany(
-                "INSERT INTO verses (translation_id, book_number, chapter, verse, text) VALUES (?, ?, ?, ?, ?)",
-                [(translation_id, b, c, v, t) for (b, c, v, t) in batch]
+            verses_data = sorted(
+                verses_data,
+                key=lambda row: (
+                    int(row[0]),
+                    int(row[3]) if str(row[3]).isdigit() else row[3],
+                    int(row[4]) if str(row[4]).isdigit() else row[4]
+                )
             )
-            conn.commit()
 
-        conn.close()
-        print(f"Bible '{old_name}' updated to '{new_name}' successfully.")
+            story_titles = {}
+            try:
+                cursor.execute("SELECT book_number, chapter, verse, title FROM stories")
+                for row in cursor.fetchall():
+                    key = (row[0], row[1], row[2])
+                    title = row[3]
+                    # Skip cross-reference entries like "(<x>490 3:23-38</x>)"
+                    if not title or re.search(r'<x\b', title, re.IGNORECASE):
+                        continue
+                    # Keep only the first readable title per verse key
+                    if key not in story_titles:
+                        story_titles[key] = title
+            except Exception:
+                pass
 
+            conn_sqlite.close()
+            os.remove(upload_path)
+            upload_path = None
+
+            # Build verse records
+            verse_records = []
+            last_book_number = None
+            sorting_number = 0
+            current_story_title = None
+
+            for book_number, sorting_order, book, chapter, verse, text in verses_data:
+                clean_book = book.strip() if isinstance(book, str) else book
+                if book_number != last_book_number:
+                    sorting_number += 1
+                    last_book_number = book_number
+                story_title = story_titles.get((book_number, chapter, verse))
+                if story_title:
+                    current_story_title = story_title
+                verse_records.append((
+                    translation_id,
+                    clean_book,
+                    book_number,
+                    sorting_number,
+                    chapter,
+                    verse,
+                    clean_verse_text(text),
+                    current_story_title
+                ))
+
+            conn_mysql = get_db_connection()
+            try:
+                with conn_mysql.cursor() as cur:
+                    # Update translation metadata
+                    cur.execute("""
+                        UPDATE translations
+                        SET name = %s,
+                            language = %s,
+                            abbreviation = %s,
+                            year = %s
+                        WHERE id = %s
+                    """, (
+                        new_name,
+                        language,
+                        new_abbr if new_abbr else src_abbr,
+                        new_year if new_year else src_year,
+                        translation_id
+                    ))
+
+                    # Replace all verses
+                    cur.execute("DELETE FROM verses WHERE translation_id = %s", (translation_id,))
+
+                    chunk_size = 1000
+                    for i in range(0, len(verse_records), chunk_size):
+                        cur.executemany("""
+                            INSERT INTO verses
+                                (translation_id, book_name, book_number, sorting_number, chapter, verse_number, text, story_title)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """, verse_records[i:i + chunk_size])
+
+                conn_mysql.commit()
+            finally:
+                conn_mysql.close()
+
+        else:
+            # Metadata-only update (no new file)
+            conn_mysql = get_db_connection()
+            try:
+                with conn_mysql.cursor() as cur:
+                    fields = ["name = %s"]
+                    values = [new_name]
+                    if new_abbr:
+                        fields.append("abbreviation = %s")
+                        values.append(new_abbr)
+                    if new_year:
+                        fields.append("year = %s")
+                        values.append(new_year)
+                    values.append(translation_id)
+                    cur.execute(
+                        f"UPDATE translations SET {', '.join(fields)} WHERE id = %s",
+                        values
+                    )
+                conn_mysql.commit()
+            finally:
+                conn_mysql.close()
+
+        return jsonify(success=True, message=f"Bible '{old_name}' updated to '{new_name}'.")
+
+    except ValueError as e:
+        if upload_path and os.path.exists(upload_path):
+            os.remove(upload_path)
+        return jsonify(success=False, error=str(e)), 400
     except Exception as e:
-        print(f"Error processing Bible update: {e}")
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
+        if upload_path and os.path.exists(upload_path):
+            os.remove(upload_path)
+        return jsonify(success=False, error=f"Error updating Bible: {e}"), 400
+
+
+@update_bible_bp.route('/api/delete-bible', methods=['POST'])
+def delete_bible():
+    data = request.get_json()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify(success=False, error='Bible name is required.'), 400
+
+    conn_mysql = get_db_connection()
+    try:
+        with conn_mysql.cursor() as cur:
+            cur.execute("SELECT id FROM translations WHERE name = %s", (name,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error=f"Translation '{name}' not found."), 404
+            # Verses are removed via ON DELETE CASCADE
+            cur.execute("DELETE FROM translations WHERE id = %s", (row["id"],))
+        conn_mysql.commit()
+    except Exception as e:
+        return jsonify(success=False, error=f"Error deleting Bible: {e}"), 400
+    finally:
+        conn_mysql.close()
+
+    return jsonify(success=True, message=f"Bible '{name}' deleted.")
