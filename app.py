@@ -19,6 +19,10 @@ import sys
 import threading
 import urllib.request
 
+_IS_LOCAL = os.environ.get("BIBLEAPI_LOCAL", "").lower() in ("1", "true", "yes")
+_IS_FROZEN = getattr(sys, "frozen", False)
+_INIT_DB_ONLY = "--init-db" in sys.argv[1:]
+
 app = Flask(__name__, static_folder="static")
 
 # Electron (file:// / localhost) + existing GitHub Pages admin UI
@@ -33,11 +37,13 @@ CORS(
     supports_credentials=False,
 )
 
-try:
-    init_db()
-    print("MySQL tables initialized.")
-except Exception as e:
-    print(f"WARNING: Could not initialize MySQL tables: {e}")
+# Desktop clients use the deployed cloud schema; only the hosted service maintains it.
+if not _IS_LOCAL and not _IS_FROZEN and not _INIT_DB_ONLY:
+    try:
+        init_db()
+        print("MySQL tables initialized.")
+    except Exception as e:
+        print(f"WARNING: Could not initialize MySQL tables: {e}")
 
 # Register blueprints without url_prefix
 app.register_blueprint(users_bp)
@@ -88,17 +94,18 @@ def keep_alive():
             print(f"[keep-alive] ping failed: {e}")
         threading.Event().wait(300)  # 5 minutes
 
-_IS_LOCAL = os.environ.get("BIBLEAPI_LOCAL", "").lower() in ("1", "true", "yes")
-_IS_FROZEN = getattr(sys, "frozen", False)
-
 # Keep-alive is only for the hosted Render free-tier sleeper — skip in desktop/local mode.
-if not _IS_LOCAL and not _IS_FROZEN:
+if not _IS_LOCAL and not _IS_FROZEN and not _INIT_DB_ONLY:
     threading.Thread(target=keep_alive, daemon=True).start()
     print("[keep-alive] thread started, pinging every 5 minutes.")
 else:
     print("[keep-alive] disabled (local/desktop mode).")
 
 def main():
+    if _INIT_DB_ONLY:
+        init_db()
+        print("MySQL tables initialized.")
+        return
     port = int(os.environ.get("PORT", 5000))
     debug = (not _IS_LOCAL and not _IS_FROZEN) and os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
     print(f"[bibleapi] starting on 0.0.0.0:{port} local={_IS_LOCAL} frozen={_IS_FROZEN} debug={debug}")

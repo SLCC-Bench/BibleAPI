@@ -1,5 +1,16 @@
 # BibleAPI
 
+## Desktop startup and schema maintenance
+
+`BIBLEAPI_LOCAL=1` and frozen desktop executables start without creating or
+altering cloud database tables. The database schema must already be provisioned;
+the hosted service retains its existing schema initialization on startup.
+
+To initialize or update the schema explicitly, run `python app.py --init-db`
+(or `bibleapi.exe --init-db` for the Windows binary) with the database settings
+configured. This command runs schema maintenance and exits without starting HTTP
+or the keep-alive thread. Use it during deployment, rather than every client launch.
+
 ## Fetching the updated Bible from the server
 
 To fetch the latest Bible data from the running server:
