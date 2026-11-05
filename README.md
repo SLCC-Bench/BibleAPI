@@ -11,6 +11,39 @@ To initialize or update the schema explicitly, run `python app.py --init-db`
 configured. This command runs schema maintenance and exits without starting HTTP
 or the keep-alive thread. Use it during deployment, rather than every client launch.
 
+## Hardware-bound registration migration
+
+Before deploying hardware-aware clients, run the explicit `--init-db` command.
+Alternatively, apply `migrations/2026-11-05-hardware-registration.sql` once for
+only the new column/index, without the other schema-initialization operations.
+It adds nullable `RegistrationCodes.hardware_device_id` and its unique index;
+existing `device_id` values and registration codes/expiry dates are preserved.
+Desktop startup still never maintains the schema. A hardware-aware request against
+an unmigrated database returns HTTP 503 with migration instructions, while
+legacy-only requests keep working. Rollback can retain this additive nullable
+column and index; do not drop device bindings or reset used codes.
+
+Clients send an application-scoped SHA-256 hardware fingerprint as `hardware_id`,
+never a physical UUID or serial. The API stores a domain-separated HMAC-SHA256 of
+that fingerprint. Keep `HMAC_SECRET` stable across deployments and desktop builds.
+An active existing registration is linked only when its legacy `device_id` matches.
+After that link, the same hardware can restore registration after an OS reformat
+without changing its original key, expiry, or legacy device binding. Redeeming a
+previously used key still requires that same device/hardware binding.
+
+Upgrade existing installations before reformatting so their hardware can be
+linked. Old MachineGuid-only hashes cannot reveal a device's physical identity
+after reformatting. macOS clients also preserve their legacy device identity while
+linking the new hashed hardware identity, so updating an existing installation
+does not lose its registration. Never auto-transfer
+a used key solely because someone knows the key; unrecognized hardware requires
+an administrator-approved recovery process.
+
+New activations preserve the original readable `registration_code` in the database;
+only device identities are hashed. Historical bcrypt-hashed registration codes
+remain verifiable when the owner re-enters their original key on the bound device.
+They cannot be decrypted or automatically converted back to readable codes.
+
 ## Fetching the updated Bible from the server
 
 To fetch the latest Bible data from the running server:

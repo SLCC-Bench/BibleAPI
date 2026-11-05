@@ -118,8 +118,10 @@ def init_db():
                     expiration_date   DATE NULL,
                     is_used           TINYINT(1) NOT NULL DEFAULT 0,
                     device_id         VARCHAR(255) NULL,
+                    hardware_device_id CHAR(64) NULL,
                     UNIQUE KEY uq_registration_code (registration_code(100)),
-                    UNIQUE KEY uq_device_id (device_id)
+                    UNIQUE KEY uq_device_id (device_id),
+                    UNIQUE KEY uq_hardware_device_id (hardware_device_id)
                 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
             """)
             # Migrations for tables that already existed
@@ -143,6 +145,18 @@ def init_db():
                 conn.commit()
             except Exception:
                 pass
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD COLUMN hardware_device_id CHAR(64) NULL")
+                conn.commit()
+            except pymysql.MySQLError as error:
+                if error.args[0] != 1060:  # Column already exists.
+                    raise
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD UNIQUE KEY uq_hardware_device_id (hardware_device_id)")
+                conn.commit()
+            except pymysql.MySQLError as error:
+                if error.args[0] != 1061:  # Index already exists.
+                    raise
         conn.commit()
     finally:
         conn.close()
