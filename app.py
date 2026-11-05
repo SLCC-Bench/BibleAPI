@@ -25,6 +25,10 @@ _INIT_DB_ONLY = "--init-db" in sys.argv[1:]
 
 app = Flask(__name__, static_folder="static")
 
+if _IS_LOCAL or _IS_FROZEN:
+    from local_security import install_local_security
+    install_local_security(app)
+
 # Electron (file:// / localhost) + existing GitHub Pages admin UI
 CORS(
     app,
@@ -76,8 +80,8 @@ def readyz():
         finally:
             conn.close()
         return "ok", 200
-    except Exception as e:
-        return {"ok": False, "error": str(e)}, 503
+    except Exception:
+        return {"ok": False, "error": "Database is not ready."}, 503
 
 # Debug endpoint to list all routes (optional, for troubleshooting)
 @app.route("/routes", methods=["GET"])
@@ -108,10 +112,10 @@ def main():
         return
     port = int(os.environ.get("PORT", 5000))
     debug = (not _IS_LOCAL and not _IS_FROZEN) and os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
-    print(f"[bibleapi] starting on 0.0.0.0:{port} local={_IS_LOCAL} frozen={_IS_FROZEN} debug={debug}")
+    host = '127.0.0.1' if _IS_LOCAL or _IS_FROZEN else '0.0.0.0'
+    print(f"[bibleapi] starting on {host}:{port} local={_IS_LOCAL} frozen={_IS_FROZEN} debug={debug}")
     print(f"[bibleapi] db host={_CONFIG.get('MYSQL_HOST')} db={_CONFIG.get('MYSQL_DB')}")
-    # Use 0.0.0.0 so Electron on the same machine can reach 127.0.0.1
-    app.run(host="0.0.0.0", port=port, debug=debug, use_reloader=False)
+    app.run(host=host, port=port, debug=debug, use_reloader=False)
 
 if __name__ == "__main__":
     main()

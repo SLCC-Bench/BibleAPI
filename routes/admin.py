@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from db import get_db_connection
 from datetime import date, timedelta
 import bcrypt
@@ -6,10 +6,45 @@ import hmac
 import hashlib
 import os
 import re
+from threading import Condition
 
 admin_bp = Blueprint('admin', __name__)
 
 _HMAC_SECRET = os.environ.get('HMAC_SECRET', 'praisehub-secret-key').encode('utf-8')
+
+# Local desktop API runs in one process; events never carry registration data.
+_registration_changes = Condition()
+_registration_revision = 0
+
+
+def _notify_registration_changed():
+    global _registration_revision
+    with _registration_changes:
+        _registration_revision += 1
+        _registration_changes.notify_all()
+
+
+@admin_bp.route('/api/registration-codes/events', methods=['GET'])
+def registration_events():
+    if request.remote_addr not in ('127.0.0.1', '::1'):
+        return jsonify(error='Registration events are available locally only.'), 403
+
+    def stream():
+        with _registration_changes:
+            revision = _registration_revision
+        # Reconcile on connect/reconnect, including changes during disconnection.
+        yield 'retry: 2000\nevent: registration-changed\ndata: {}\n\n'
+        while True:
+            with _registration_changes:
+                changed = _registration_changes.wait_for(
+                    lambda: revision != _registration_revision, timeout=25)
+                revision = _registration_revision
+            yield ('event: registration-changed\ndata: {}\n\n'
+                   if changed else ': keep-alive\n\n')
+
+    return Response(stream(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no',
+    })
 
 def normalize_device_id(device_id):
     return device_id.strip().lower()
@@ -182,6 +217,7 @@ def create_registration_code():
                 VALUES (%s, %s, %s)
             """, (code, reg_type, int(trial_days) if trial_days else None))
         conn.commit()
+        _notify_registration_changed()
         return jsonify(success=True)
     except Exception as e:
         conn.rollback()
@@ -217,6 +253,7 @@ def expire_registration_code(code_id):
             cur.execute("UPDATE RegistrationCodes SET expiration_date = %s WHERE id = %s",
                         (yesterday, code_id))
         conn.commit()
+        _notify_registration_changed()
         return jsonify(success=True, expiration_date=str(yesterday))
     except Exception as e:
         conn.rollback()
@@ -241,6 +278,7 @@ def allow_registration_replacement(code_id):
                 return jsonify(success=False, error='Only a device-bound registration can allow another code.'), 400
             cur.execute("UPDATE RegistrationCodes SET allow_code_replacement = %s WHERE id = %s", (allowed, code_id))
         conn.commit()
+        _notify_registration_changed()
         return jsonify(success=True, allow_code_replacement=allowed)
     except Exception as error:
         return _registration_error(conn, error)
@@ -258,6 +296,7 @@ def delete_registration_code(code_id):
                 return jsonify(success=False, error='Registration code not found.'), 404
             cur.execute("DELETE FROM RegistrationCodes WHERE id = %s", (code_id,))
         conn.commit()
+        _notify_registration_changed()
         return jsonify(success=True)
     except Exception as e:
         conn.rollback()
@@ -386,6 +425,7 @@ def redeem_registration_code():
             _bind_hardware(cur, row, hashed_hardware)
         conn.commit()
 
+        _notify_registration_changed()
         return jsonify(
             success=True,
             registration_type=row['registration_type'],

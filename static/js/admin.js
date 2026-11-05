@@ -1,4 +1,33 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    // Hosted deployments keep their existing authentication configuration.
+    const localAdmin = ['127.0.0.1', 'localhost'].includes(location.hostname);
+    let csrf = '';
+    if (localAdmin) {
+        try {
+            const response = await window.fetch('/auth/session', { cache: 'no-store' });
+            const result = await response.json();
+            if (!response.ok || !result.authenticated) { location.replace('/login'); return; }
+            csrf = result.csrf;
+        } catch { location.replace('/login'); return; }
+    }
+    const fetch = async (url, options = {}) => {
+        const headers = new Headers(options.headers || {});
+        if (localAdmin && new URL(url, location.href).origin === location.origin
+            && !['GET', 'HEAD'].includes((options.method || 'GET').toUpperCase())) {
+            headers.set('X-CSRF-Token', csrf);
+        }
+        const response = await window.fetch(url, { ...options, headers });
+        if (localAdmin && response.status === 401) location.replace('/login');
+        return response;
+    };
+    const logout = document.getElementById('admin-logout');
+    if (logout) {
+        logout.hidden = !localAdmin;
+        logout.onclick = async () => {
+            const response = await fetch('/auth/logout', { method: 'POST' });
+            if (response.ok) location.replace('/login');
+        };
+    }
     // Tab switching logic
     const tabUser = document.getElementById('tabUser');
     const tabBible = document.getElementById('tabBible');
@@ -750,56 +779,50 @@ document.getElementById('closeBibleViewer').onclick = function() {
             tdId.textContent = c.id;
             tr.appendChild(tdId);
 
-            // Registration Code — ellipsis + copy on hover for plain-text codes
+            // Registration Code — keep copy available before and after activation
             const tdCode = document.createElement('td');
             tdCode.className = 'px-4 py-2 max-w-[220px]';
 
-            if (c.is_used) {
-                // Encrypted: truncate, show full hash as tooltip
-                const span = document.createElement('span');
-                span.className = 'font-mono text-xs text-gray-400 block truncate';
-                span.title = c.registration_code;
-                span.textContent = c.registration_code;
-                tdCode.appendChild(span);
-            } else {
-                // Plain text: truncate + copy icon revealed on hover
-                const wrapper = document.createElement('div');
-                wrapper.className = 'flex items-center gap-2';
+            // Truncate + copy icon revealed on hover or keyboard focus
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-center gap-2';
 
-                const span = document.createElement('span');
-                span.className = 'font-mono text-sm truncate';
-                span.title = c.registration_code;
-                span.textContent = c.registration_code;
+            const span = document.createElement('span');
+            span.className = 'font-mono text-sm truncate';
+            span.title = c.registration_code;
+            span.textContent = c.registration_code;
 
-                const copyBtn = document.createElement('button');
-                copyBtn.type = 'button';
-                copyBtn.title = 'Copy to clipboard';
-                copyBtn.style.cssText = 'flex-shrink:0;opacity:0;transition:opacity 0.15s;color:#9ca3af;';
-                copyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`;
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.title = 'Copy to clipboard';
+            copyBtn.setAttribute('aria-label', 'Copy registration code');
+            copyBtn.onfocus = () => copyBtn.style.opacity = '1';
+            copyBtn.onblur = () => copyBtn.style.opacity = '0';
+            copyBtn.style.cssText = 'flex-shrink:0;opacity:0;transition:opacity 0.15s;color:#9ca3af;';
+            copyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`;
 
-                copyBtn.onmouseenter = () => copyBtn.style.color = '#0d9488';
-                copyBtn.onmouseleave = () => copyBtn.style.color = '#9ca3af';
-                copyBtn.onclick = () => {
-                    navigator.clipboard.writeText(c.registration_code)
-                        .then(() => showToast('Code copied!', 'success', 1500))
-                        .catch(() => {
-                            const tmp = document.createElement('input');
-                            tmp.value = c.registration_code;
-                            document.body.appendChild(tmp);
-                            tmp.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(tmp);
-                            showToast('Code copied!', 'success', 1500);
-                        });
-                };
+            copyBtn.onmouseenter = () => copyBtn.style.color = '#0d9488';
+            copyBtn.onmouseleave = () => copyBtn.style.color = '#9ca3af';
+            copyBtn.onclick = () => {
+                Promise.resolve().then(() => navigator.clipboard.writeText(c.registration_code))
+                    .then(() => showToast('Code copied!', 'success', 1500))
+                    .catch(() => {
+                        const tmp = document.createElement('input');
+                        tmp.value = c.registration_code;
+                        document.body.appendChild(tmp);
+                        tmp.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tmp);
+                        showToast('Code copied!', 'success', 1500);
+                    });
+            };
 
-                tdCode.addEventListener('mouseenter', () => copyBtn.style.opacity = '1');
-                tdCode.addEventListener('mouseleave', () => copyBtn.style.opacity = '0');
+            tdCode.addEventListener('mouseenter', () => copyBtn.style.opacity = '1');
+            tdCode.addEventListener('mouseleave', () => copyBtn.style.opacity = '0');
 
-                wrapper.appendChild(span);
-                wrapper.appendChild(copyBtn);
-                tdCode.appendChild(wrapper);
-            }
+            wrapper.appendChild(span);
+            wrapper.appendChild(copyBtn);
+            tdCode.appendChild(wrapper);
             tr.appendChild(tdCode);
 
             // Type

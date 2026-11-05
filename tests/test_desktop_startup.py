@@ -37,6 +37,9 @@ class DesktopStartupTests(unittest.TestCase):
         database = types.ModuleType("db")
         database.init_db = init_db
         modules = {"flask": flask, "flask_cors": cors, "config_loader": config, "db": database}
+        security = types.ModuleType('local_security')
+        security.install_local_security = Mock()
+        modules['local_security'] = security
         for name, blueprint in {
             "users": "users_bp", "bible": "bible_bp", "uploadBible": "upload_bible_bp",
             "updateBible": "update_bible_bp", "webhook": "webhook_bp",

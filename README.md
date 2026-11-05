@@ -11,6 +11,28 @@ To initialize or update the schema explicitly, run `python app.py --init-db`
 configured. This command runs schema maintenance and exits without starting HTTP
 or the keep-alive thread. Use it during deployment, rather than every client launch.
 
+## Local administrator access
+
+Desktop/local mode binds only to `127.0.0.1`. Open `/login` on the app's active
+local API port to sign in and reach `/static/admin.html`. The supplied username
+is stored as a SHA-256 digest and the password as a salted PBKDF2-SHA256 hash
+in `admin_credentials.json`; neither plaintext credential is shipped.
+Admin sessions expire after five minutes of inactivity and are reset on API restart.
+State-changing browser requests require CSRF tokens. Login is limited to five
+attempts per minute; logout clears the browser session.
+
+Praisehub generates a random app token each launch and passes it only to its
+child API and trusted app requests from Electron's main process. It is not
+saved to disk or exposed through preload/IPC. It permits Bible reads, song
+sync, registration checking/redemption, readiness, and local events; it does
+not grant admin controls, code listing, or user management. All other direct
+API requests require the administrator session. Hosted-mode auth is unchanged.
+
+`local_security.py` and the hash-only JSON must be included in desktop builds.
+Keep the credential text file outside source control. A user controlling the OS
+account can inspect or modify local processes and binaries; these controls do
+not make a client-side application tamper-proof or replace database least privilege.
+
 ## Hardware-bound registration migration
 
 Before deploying hardware-aware clients, run the explicit `--init-db` command.
@@ -48,9 +70,16 @@ They cannot be decrypted or automatically converted back to readable codes.
 
 Apply `migrations/2026-11-05-registration-replacement.sql` once (or run the
 explicit `--init-db` deployment command). In the admin Registration Codes tab,
-choose **Allow another code** on the device's current used code. Reopen the
-device's Registration tab to enter the replacement. **Cancel code change**
-revokes permission. Offline devices keep the entry field hidden.
+choose **Allow another code** on the device's current used code. The open
+Registration tab updates through a local Server-Sent Events connection;
+**Cancel code change** hides the field again. No periodic registration queries
+are made. Keep-alives do not access the database, and reconnecting reconciles
+the current permission. Closing the tab closes the connection. Offline devices
+keep the entry field hidden.
+
+Events are loopback-only and process-local: changes must go through this same
+local BibleAPI instance. Changes from another API process, a hosted admin, or
+direct SQL are not broadcast. The stream carries no codes or device identities.
 
 The API enforces this permission even for direct redemption requests. Only a
 valid, unused new key replaces an active registration. A failed attempt leaves
