@@ -854,6 +854,33 @@ document.getElementById('closeBibleViewer').onclick = function() {
             const tdActions = document.createElement('td');
             tdActions.className = 'px-4 py-2 flex items-center gap-2';
 
+            if (c.is_used && (c.device_id || c.hardware_device_id)) {
+                const replacementBtn = document.createElement('button');
+                replacementBtn.type = 'button';
+                replacementBtn.className = 'text-blue-600 hover:text-blue-800 transition text-xs font-medium whitespace-nowrap';
+                replacementBtn.textContent = c.allow_code_replacement ? 'Cancel code change' : 'Allow another code';
+                replacementBtn.setAttribute('aria-pressed', String(Boolean(c.allow_code_replacement)));
+                replacementBtn.onclick = async () => {
+                    replacementBtn.disabled = true;
+                    try {
+                        const response = await fetch(`/api/registration-codes/${c.id}/replacement`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ allowed: !c.allow_code_replacement })
+                        });
+                        const result = await response.json();
+                        if (!response.ok || !result.success) throw new Error(result.error || 'Failed to update permission.');
+                        showToast(result.allow_code_replacement ? 'This device may enter another code.' : 'Code change permission removed.', 'success');
+                        fetchRegCodes();
+                    } catch (error) {
+                        showToast(error.message || 'Request failed.', 'error');
+                    } finally {
+                        replacementBtn.disabled = false;
+                    }
+                };
+                tdActions.appendChild(replacementBtn);
+            }
+
             // Expire button — only for active trial codes that are not yet expired
             const isActiveTrial = c.is_used &&
                 c.registration_type === 'trial' &&

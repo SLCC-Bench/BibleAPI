@@ -172,6 +172,73 @@ class HardwareBindingTests(unittest.TestCase):
         self.assertIsNone(connection.row['hardware_device_id'])
         self.assertEqual(new_row['hardware_device_id'], hardware)
 
+    def test_registered_device_only_sees_replacement_permission_when_enabled(self):
+        connection = self.connection()
+        self.assertFalse(self.request(connection).json['allow_code_replacement'])
+        connection.row['allow_code_replacement'] = 1
+        self.assertTrue(self.request(connection).json['allow_code_replacement'])
+
+    def test_admin_can_allow_and_revoke_replacement_for_a_bound_registration(self):
+        connection = self.connection()
+        with patch.object(self.admin, 'get_db_connection', return_value=connection):
+            for allowed in (True, False):
+                response = self.client.post('/api/registration-codes/1/replacement', json={'allowed': allowed})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(bool(connection.row['allow_code_replacement']), allowed)
+
+    def test_admin_cannot_allow_replacement_for_an_unused_code(self):
+        connection = self.connection(bound=False, used=False)
+        with patch.object(self.admin, 'get_db_connection', return_value=connection):
+            response = self.client.post('/api/registration-codes/1/replacement', json={'allowed': True})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(connection.commits, 0)
+
+    def test_active_registration_rejects_another_unused_key_without_permission(self):
+        connection = self.connection()
+        connection.rows.append(dict(connection.row, id=2, registration_code='new-key', is_used=0,
+                                    device_id=None, hardware_device_id=None))
+        response = self.request(connection, redeem=True, code='new-key')
+        self.assertEqual(response.status_code, 409)
+        self.assertIsNotNone(connection.row['hardware_device_id'])
+        self.assertFalse(connection.rows[1]['is_used'])
+
+    def test_replacement_moves_binding_and_consumes_permission(self):
+        connection = self.connection(trial=True)
+        connection.row['allow_code_replacement'] = 1
+        old_expiry = connection.row['expiration_date']
+        hardware = connection.row['hardware_device_id']
+        connection.rows.append(dict(connection.row, id=2, registration_code='new-key', is_used=0,
+                                    device_id=None, hardware_device_id=None, allow_code_replacement=0,
+                                    registration_type='permanent', expiration_date=None))
+        response = self.request(connection, redeem=True, code='new-key')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json['expiration_date'])
+        self.assertTrue(connection.row['is_used'])
+        self.assertEqual(connection.row['expiration_date'], old_expiry)
+        self.assertFalse(connection.row['allow_code_replacement'])
+        self.assertIsNone(connection.row['device_id'])
+        self.assertIsNone(connection.row['hardware_device_id'])
+        self.assertTrue(connection.rows[1]['is_used'])
+        self.assertEqual(connection.rows[1]['hardware_device_id'], hardware)
+        self.assertFalse(self.request(connection).json['allow_code_replacement'])
+
+    def test_invalid_replacement_keeps_current_license_and_permission(self):
+        connection = self.connection(trial=True)
+        connection.row['allow_code_replacement'] = 1
+        original = dict(connection.row)
+        response = self.request(connection, redeem=True, code='invalid-key')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(connection.row, original)
+
+    def test_reentering_same_key_does_not_consume_replacement_permission(self):
+        connection = self.connection(trial=True)
+        connection.row['allow_code_replacement'] = 1
+        expiry = connection.row['expiration_date']
+        response = self.request(connection, redeem=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(connection.row['expiration_date'], expiry)
+        self.assertTrue(connection.row['allow_code_replacement'])
+
 
 if __name__ == '__main__':
     unittest.main()

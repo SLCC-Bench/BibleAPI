@@ -91,8 +91,20 @@ def _registration_error(conn, error):
     if isinstance(error, HardwareBindingConflict) or (error.args and error.args[0] == 1062):
         return jsonify(success=False, error='Registration is bound to another physical device.'), 409
     if error.args and error.args[0] == 1054:
-        return jsonify(success=False, error='Hardware registration requires a database migration. Run BibleAPI --init-db before using hardware identities.'), 503
+        return jsonify(success=False, error='Registration requires a database migration. Run BibleAPI --init-db before using this feature.'), 503
     return jsonify(success=False, error='Registration could not be verified. Please retry.'), 500
+
+
+def _can_replace_code(cur, row):
+    # Older schemas keep replacement disabled until explicitly migrated.
+    try:
+        cur.execute("SELECT allow_code_replacement FROM RegistrationCodes WHERE id = %s FOR UPDATE", (row['id'],))
+        permission = cur.fetchone()
+        return bool(permission and permission.get('allow_code_replacement'))
+    except Exception as error:
+        if error.args and error.args[0] == 1054:
+            return False
+        raise
 
 
 def _lookup_by_device(cur, device_id):
@@ -135,7 +147,7 @@ def get_registration_codes():
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, registration_code, registration_type,
-                       trial_days, expiration_date, is_used, device_id
+                       trial_days, expiration_date, is_used, device_id, hardware_device_id, allow_code_replacement
                 FROM RegistrationCodes
                 ORDER BY id DESC
             """)
@@ -213,6 +225,29 @@ def expire_registration_code(code_id):
         conn.close()
 
 
+@admin_bp.route('/api/registration-codes/<int:code_id>/replacement', methods=['POST'])
+def allow_registration_replacement(code_id):
+    allowed = (request.json or {}).get('allowed')
+    if not isinstance(allowed, bool):
+        return jsonify(success=False, error='allowed must be true or false.'), 400
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT is_used, device_id, hardware_device_id FROM RegistrationCodes WHERE id = %s FOR UPDATE", (code_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify(success=False, error='Registration code not found.'), 404
+            if not row['is_used'] or not (row['device_id'] or row['hardware_device_id']):
+                return jsonify(success=False, error='Only a device-bound registration can allow another code.'), 400
+            cur.execute("UPDATE RegistrationCodes SET allow_code_replacement = %s WHERE id = %s", (allowed, code_id))
+        conn.commit()
+        return jsonify(success=True, allow_code_replacement=allowed)
+    except Exception as error:
+        return _registration_error(conn, error)
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/registration-codes/<int:code_id>', methods=['DELETE'])
 def delete_registration_code(code_id):
     conn = get_db_connection()
@@ -247,8 +282,10 @@ def check_registration():
     try:
         with conn.cursor() as cur:
             row, _, hashed_hardware = _lookup_identity(cur, device_id, hardware_id)
+            allow_replacement = False
             if row and row['is_used'] and not _expired(row):
                 _bind_hardware(cur, row, hashed_hardware)
+                allow_replacement = _can_replace_code(cur, row)
             conn.commit()  # persist any migration update
 
         if not row or not row['is_used']:
@@ -259,6 +296,7 @@ def check_registration():
 
         return jsonify(
             registered=True,
+            allow_code_replacement=allow_replacement,
             registration_type=row['registration_type'],
             expiration_date=expiration_date,
             is_expired=is_expired
@@ -288,6 +326,7 @@ def redeem_registration_code():
     try:
         with conn.cursor() as cur:
             existing, hashed_device, hashed_hardware = _lookup_identity(cur, device_id, hardware_id)
+            allow_replacement = False
             if existing:
                 is_expired_trial = _expired(existing)
                 if existing['is_used'] and _same_code(code, existing['registration_code']):
@@ -300,7 +339,8 @@ def redeem_registration_code():
                         registration_type=existing['registration_type'],
                         expiration_date=str(existing['expiration_date']) if existing['expiration_date'] else None
                     )
-                if not is_expired_trial:
+                allow_replacement = _can_replace_code(cur, existing)
+                if not is_expired_trial and not allow_replacement:
                     return jsonify(success=False, error='This device already has an active registration.'), 409
 
             cur.execute("""
@@ -322,6 +362,8 @@ def redeem_registration_code():
 
         with conn.cursor() as cur:
             if existing:
+                if allow_replacement:
+                    cur.execute("UPDATE RegistrationCodes SET allow_code_replacement = 0 WHERE id = %s", (existing['id'],))
                 # Old clients can renew an expired trial without losing its hardware link.
                 if not hashed_hardware:
                     try:

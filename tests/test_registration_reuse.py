@@ -49,6 +49,13 @@ class Cursor:
                 row['hardware_device_id'] = params[0]
         elif normalized.startswith('UPDATE RegistrationCodes SET device_id = %s'):
             row['device_id'] = params[0]
+        elif normalized.startswith('UPDATE RegistrationCodes SET allow_code_replacement'):
+            if ' = 0 ' in normalized:
+                row = next(row for row in self.connection.rows if row['id'] == params[0])
+                row['allow_code_replacement'] = 0
+            else:
+                row = next(row for row in self.connection.rows if row['id'] == params[1])
+                row['allow_code_replacement'] = int(params[0])
         elif normalized.startswith('UPDATE'):
             if 'SET is_used = 1' in normalized:
                 row = next(row for row in self.connection.rows if row['id'] == params[2])
@@ -69,6 +76,7 @@ class Cursor:
 
 class Connection:
     def __init__(self, row):
+        row.setdefault('allow_code_replacement', 0)
         self.row = row
         self.rows = [row]
         self.original = deepcopy(row)

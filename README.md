@@ -44,6 +44,20 @@ only device identities are hashed. Historical bcrypt-hashed registration codes
 remain verifiable when the owner re-enters their original key on the bound device.
 They cannot be decrypted or automatically converted back to readable codes.
 
+## Allowing a registered device to enter another code
+
+Apply `migrations/2026-11-05-registration-replacement.sql` once (or run the
+explicit `--init-db` deployment command). In the admin Registration Codes tab,
+choose **Allow another code** on the device's current used code. Reopen the
+device's Registration tab to enter the replacement. **Cancel code change**
+revokes permission. Offline devices keep the entry field hidden.
+
+The API enforces this permission even for direct redemption requests. Only a
+valid, unused new key replaces an active registration. A failed attempt leaves
+the current license intact. Successful replacement moves the hashed device and
+hardware bindings to the new key and consumes permission; the old key remains
+used. Re-entering the original key still preserves its expiry as before.
+
 ## Fetching the updated Bible from the server
 
 To fetch the latest Bible data from the running server:

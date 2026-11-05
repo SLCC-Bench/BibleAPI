@@ -119,6 +119,7 @@ def init_db():
                     is_used           TINYINT(1) NOT NULL DEFAULT 0,
                     device_id         VARCHAR(255) NULL,
                     hardware_device_id CHAR(64) NULL,
+                    allow_code_replacement TINYINT(1) NOT NULL DEFAULT 0,
                     UNIQUE KEY uq_registration_code (registration_code(100)),
                     UNIQUE KEY uq_device_id (device_id),
                     UNIQUE KEY uq_hardware_device_id (hardware_device_id)
@@ -150,6 +151,12 @@ def init_db():
                 conn.commit()
             except pymysql.MySQLError as error:
                 if error.args[0] != 1060:  # Column already exists.
+                    raise
+            try:
+                cur.execute("ALTER TABLE RegistrationCodes ADD COLUMN allow_code_replacement TINYINT(1) NOT NULL DEFAULT 0")
+                conn.commit()
+            except pymysql.MySQLError as error:
+                if error.args[0] != 1060:
                     raise
             try:
                 cur.execute("ALTER TABLE RegistrationCodes ADD UNIQUE KEY uq_hardware_device_id (hardware_device_id)")
