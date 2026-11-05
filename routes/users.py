@@ -3,7 +3,7 @@ print("users.py loaded")  # Debug print
 from flask import Blueprint, request, jsonify
 import os
 import sqlite3
-from utils import get_users, post_user, put_user, delete_user, generate_registration_key, send_email_verification, BASE_URL
+from utils import get_users, post_user, put_user, delete_user
 
 users_bp = Blueprint('users', __name__)
 
@@ -31,27 +31,19 @@ def crud_users():
         return jsonify(users=result)
     elif request.method == 'POST':
         data = request.json
-        email = data.get('email')
+        username = data.get('username')
         mobile = data.get('mobile')
-        # Check for duplicate email or mobile
-        cursor.execute("SELECT id FROM Users WHERE email=? OR mobile=?", (email, mobile))
+        # Check for duplicate username or mobile when provided.
+        if mobile:
+            cursor.execute("SELECT id FROM Users WHERE username=? OR mobile=?", (username, mobile))
+        else:
+            cursor.execute("SELECT id FROM Users WHERE username=?", (username,))
         duplicate_row = cursor.fetchone()
         if duplicate_row:
             conn.close()
-            return jsonify(success=False, error="Email or mobile number already exists."), 409
+            return jsonify(success=False, error="Username or mobile number already exists."), 409
         post_user(cursor, data)
         conn.commit()
-        # Send email verification link
-        cursor.execute("SELECT id FROM Users WHERE email=?", (email,))
-        user_row = cursor.fetchone()
-        if user_row:
-            user_id = user_row[0]
-            verification_token = generate_registration_key(32)
-            # Save token in Registration table
-            cursor.execute("UPDATE Registration SET registrationkey=? WHERE userid=?", (verification_token, user_id))
-            conn.commit()
-            verification_link = f"{BASE_URL}/api/verify-email?email={email}&token={verification_token}"
-            send_email_verification(email, verification_link)
         conn.close()
         return jsonify(success=True)
     elif request.method == 'PUT':

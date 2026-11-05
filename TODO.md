@@ -1,0 +1,4 @@
+- [x] Update `/api/verses/<translation>` in `routes/bible.py` to return full verse objects from Bible JSON files.
+- [x] Improve translation lookup to support translation name, abbreviation, and filename (without `.json`).
+- [x] Verify endpoint behavior remains JSON-response compatible.
+- [x] Sanitize uploaded verse text in `routes/uploadBible.py` so `Verse` contains no HTML/XML tags.

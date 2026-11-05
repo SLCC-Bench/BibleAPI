@@ -1,0 +1,15 @@
+:root { font-family: system-ui, sans-serif; color: #111827; background: #f3f4f6; }
+* { box-sizing: border-box; }
+body { min-height: 100vh; margin: 0; padding: 24px; display: grid; place-items: center; }
+main { width: 100%; max-width: 420px; background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 8px 24px #1118270d; }
+.eyebrow { color: #0f766e; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+h1 { margin: 16px 0 8px; font-size: 28px; }
+.description { color: #4b5563; line-height: 1.5; margin-bottom: 24px; }
+label { display: block; margin: 16px 0 8px; font-size: 14px; font-weight: 600; }
+input, button { font: inherit; width: 100%; min-height: 44px; border-radius: 6px; }
+input { padding: 10px 12px; border: 1px solid #9ca3af; }
+input:focus-visible, button:focus-visible { outline: 3px solid #99f6e4; outline-offset: 2px; }
+button { color: white; background: #0f766e; border: 0; padding: 10px; cursor: pointer; font-weight: 600; }
+button:hover { background: #115e59; }
+button:disabled { opacity: .65; cursor: wait; }
+#login-error { color: #b91c1c; font-size: 14px; min-height: 20px; line-height: 1.5; }

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BibleAPI Admin · Sign in</title>
+  <link rel="stylesheet" href="/static/login.css">
+  <script src="/static/login.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">BIBLEAPI · LOCAL ADMIN</p>
+    <h1>Sign in</h1>
+    <p class="description">Enter your administrator credentials to manage this local BibleAPI.</p>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" maxlength="256" required autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+      <p id="login-error" role="alert" aria-live="polite"></p>
+      <button id="login-submit" type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>
